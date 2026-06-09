@@ -1,0 +1,411 @@
+@import "tailwindcss";
+
+:root {
+  --texture-url: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'><defs><pattern id='dots' width='14' height='14' patternUnits='userSpaceOnUse'><circle cx='2' cy='2' r='2' fill='%23C8C5BE' opacity='0.15'/></pattern><radialGradient id='fade' cx='50%' cy='50%' r='70.7%'><stop offset='0%' stop-color='black'/><stop offset='100%' stop-color='white'/></radialGradient><mask id='mask'><rect width='100%' height='100%' fill='url(%23fade)'/></mask></defs><rect width='100%' height='100%' fill='url(%23dots)' mask='url(%23mask)'/></svg>");
+}
+
+.bg-white, .bg-\[\#ffffff\], .bg-\[\#FFFFFF\] {
+  background-color: #ffffff !important;
+  --texture-url: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'><defs><pattern id='dots' width='14' height='14' patternUnits='userSpaceOnUse'><circle cx='2' cy='2' r='2' fill='%23C8C5BE' opacity='0.15'/></pattern><radialGradient id='fade' cx='50%' cy='50%' r='70.7%'><stop offset='0%' stop-color='black'/><stop offset='100%' stop-color='white'/></radialGradient><mask id='mask'><rect width='100%' height='100%' fill='url(%23fade)'/></mask></defs><rect width='100%' height='100%' fill='url(%23dots)' mask='url(%23mask)'/></svg>") !important;
+}
+
+.bg-\[\#0F0F0E\], .bg-\[\#0f0f0e\], .bg-night, .bg-dark {
+  background-color: #0f0f0e !important;
+  --texture-url: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'><defs><pattern id='dots' width='14' height='14' patternUnits='userSpaceOnUse'><circle cx='2' cy='2' r='2' fill='%231E1E1C' opacity='0.60'/></pattern><radialGradient id='fade' cx='50%' cy='50%' r='70.7%'><stop offset='0%' stop-color='black'/><stop offset='100%' stop-color='white'/></radialGradient><mask id='mask'><rect width='100%' height='100%' fill='url(%23fade)'/></mask></defs><rect width='100%' height='100%' fill='url(%23dots)' mask='url(%23mask)'/></svg>") !important;
+}
+
+.bg-\[\#F4F3F0\], .bg-\[\#f4f3f0\], .bg-\[\#F5F5F3\], .bg-\[\#f5f5f3\], .bg-paper {
+  background-color: #f4f3f0 !important;
+  --texture-url: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'><defs><pattern id='dots' width='14' height='14' patternUnits='userSpaceOnUse'><circle cx='2' cy='2' r='2' fill='%23C8C5BE' opacity='0.15'/></pattern><radialGradient id='fade' cx='50%' cy='50%' r='70.7%'><stop offset='0%' stop-color='black'/><stop offset='100%' stop-color='white'/></radialGradient><mask id='mask'><rect width='100%' height='100%' fill='url(%23fade)'/></mask></defs><rect width='100%' height='100%' fill='url(%23dots)' mask='url(%23mask)'/></svg>") !important;
+}
+
+@theme {
+  /* ── Surfaces ────────────────────────────────────────────────────── */
+  --color-paper:          #f4f3f0;   /* Ivoire chaud — fond principal */
+  --color-surface:        #ffffff;
+  --color-night:          #0f0f0e;   /* Fond sombre — hero / CTA */
+  --color-night-soft:     #1e1e1c;
+  --color-ink:            #1a1a1a;
+  --color-muted:          #6b6b6b;
+  --color-faint:          #8a8880;
+  --color-line:           #e0ddd8;
+  --color-line-strong:    #cac5bc;
+
+  /* ── Palette officielle Propulsion (5 couleurs du logo) ────────── */
+  --color-brand:          #2e6fd4;   /* Bleu Royal — couleur maîtresse */
+  --color-brand-dark:     #1d57ad;
+  --color-brand-soft:     #e8f0fe;
+  --color-brand-ink:      #0e2a52;
+  --color-gold:           #f0a500;   /* Orange / Or */
+  --color-gold-dark:      #b87e00;
+  --color-gold-soft:      #fef6e5;
+  --color-purple:         #6c3fc5;   /* Violet */
+  --color-purple-soft:    #f1ecfb;
+  --color-red:            #e8174b;   /* Rose / Rouge */
+  --color-red-soft:       #fde8ed;
+  --color-dark:           #1a1a1a;   /* Noir (5e figure du logo) */
+
+  /* ── Couleurs de Niveaux (Exclusif) ────────────────────────── */
+  --color-level-standard: #2e6fd4;
+  --color-level-pro:      #6c3fc5;
+  --color-level-elite:    #c9a84c;
+
+  /* ── Typographie ─────────────────────────────────────────────────── */
+  --font-sans:   var(--font-outfit), system-ui, sans-serif;
+  --font-serif:  var(--font-plus-jakarta), sans-serif;
+  --font-mono:   monospace;
+
+  /* ── Radii ───────────────────────────────────────────────────────── */
+  --radius-card: 1.0rem;
+  --radius-pill: 999px;
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body, section, footer {
+    background-image: var(--texture-url);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 100% 100%;
+    background-attachment: fixed;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-brand);
+    color: #fff;
+  }
+
+  .nums  { font-variant-numeric: tabular-nums; }
+  .serif { font-family: var(--font-serif), Georgia, "Times New Roman", serif; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   KEYFRAMES
+═══════════════════════════════════════════════════════════════════ */
+
+@keyframes prop-fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0);     }
+}
+
+@keyframes prop-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes prop-slide-right {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0);     }
+}
+
+@keyframes prop-slide-left-in {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes prop-slide-right-in {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes prop-zoom-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes prop-float {
+  0%, 100% { transform: translateY(0);     }
+  50%       { transform: translateY(-14px); }
+}
+
+@keyframes prop-ticker {
+  from { transform: translateX(0);    }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes prop-stripe-in {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@keyframes prop-pulse-ring {
+  0%   { box-shadow: 0 0 0 0    rgba(56, 113, 194, 0.45); }
+  70%  { box-shadow: 0 0 0 10px rgba(56, 113, 194, 0);    }
+  100% { box-shadow: 0 0 0 0    rgba(56, 113, 194, 0);    }
+}
+
+@keyframes prop-pulse-gold {
+  0%   { box-shadow: 0 0 0 0    rgba(255, 172, 66, 0.5); }
+  70%  { box-shadow: 0 0 0 10px rgba(255, 172, 66, 0);   }
+  100% { box-shadow: 0 0 0 0    rgba(255, 172, 66, 0);   }
+}
+
+@keyframes prop-spin {
+  from { transform: rotate(0deg);   }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes prop-bounce-soft {
+  0%, 100% { transform: translateY(0);   }
+  50%       { transform: translateY(-6px); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CLASSES D'ANIMATION
+═══════════════════════════════════════════════════════════════════ */
+
+/* Reveal-on-scroll par IntersectionObserver */
+.reveal, .reveal-up {
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.reveal.is-visible, .reveal-up.is-visible {
+  animation: prop-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.reveal-left {
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.reveal-left.is-visible {
+  animation: prop-slide-right-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.reveal-right {
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.reveal-right.is-visible {
+  animation: prop-slide-left-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.reveal-zoom {
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.reveal-zoom.is-visible {
+  animation: prop-zoom-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Premium card hover micro-interactions */
+.defi-card-hover {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.defi-card-hover:hover {
+  transform: translateY(-6px);
+  border-color: rgba(46, 111, 212, 0.3);
+  box-shadow: 0 12px 30px -10px rgba(46, 111, 212, 0.08);
+}
+
+.formula-card-standard-hover {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.formula-card-standard-hover:hover {
+  transform: translateY(-8px) scale(1.015);
+  border-color: var(--color-level-standard);
+  box-shadow: 0 16px 40px -12px rgba(46, 111, 212, 0.16);
+}
+
+.formula-card-pro-hover {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.formula-card-pro-hover:hover {
+  transform: translateY(-8px) scale(1.015);
+  border-color: var(--color-level-pro);
+  box-shadow: 0 16px 40px -12px rgba(108, 63, 197, 0.18);
+}
+
+.formula-card-elite-hover {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.formula-card-elite-hover:hover {
+  transform: translateY(-8px) scale(1.015);
+  border-color: var(--color-level-elite);
+  box-shadow: 0 16px 40px -12px rgba(201, 168, 76, 0.2);
+}
+
+.day-card-hover {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.day-card-hover:hover {
+  transform: translateY(-6px);
+  border-color: var(--hover-glow) !important;
+  box-shadow: 0 12px 28px -10px var(--hover-glow);
+}
+
+/* ── Champ de formulaire réutilisable ──────────────────────────────── */
+.field-input {
+  display: block;
+  width: 100%;
+  font-size: 13.5px;
+  color: var(--color-ink);
+  background: transparent;
+  outline: none;
+  line-height: 1.5;
+}
+.field-input::placeholder {
+  color: var(--color-faint);
+}
+
+/* Brand stripe reveal (scaleX) */
+.stripe-reveal {
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+.stripe-reveal.is-visible {
+  animation: prop-stripe-in 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.15s;
+}
+
+.float-slow   { animation: prop-float      7s  ease-in-out infinite; }
+.pulse-ring   { animation: prop-pulse-ring 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+.pulse-gold   { animation: prop-pulse-gold 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+.ticker-loop  { animation: prop-ticker     34s  linear infinite; }
+.spin-slow    { animation: prop-spin       20s  linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .stripe-reveal,
+  .float-slow,
+  .pulse-ring,
+  .pulse-gold,
+  .ticker-loop,
+  .spin-slow {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  html { scroll-behavior: auto; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   UTILITAIRES GRAPHIQUES
+═══════════════════════════════════════════════════════════════════ */
+
+@utility bg-dot-grid {
+  background-image: radial-gradient(var(--color-line) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+
+@utility bg-halftone {
+  background-image: radial-gradient(circle, rgba(0,0,0,0.07) 1.4px, transparent 1.4px);
+  background-size: 15px 15px;
+}
+
+@utility bg-halftone-light {
+  background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1.4px, transparent 1.4px);
+  background-size: 15px 15px;
+}
+
+/* Bande signature 5 couleurs — élément récurrent de la charte Propulsion */
+@utility brand-stripe {
+  background: linear-gradient(
+    90deg,
+    #f0a500 0% 20%,
+    #6c3fc5 20% 40%,
+    #1a1a1a 40% 60%,
+    #2e6fd4 60% 80%,
+    #e8174b 80% 100%
+  );
+}
+
+@keyframes prop-slide-left {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@utility animate-drawer-slide {
+  animation: prop-slide-left 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Champ input minimaliste à ligne unique */
+.input-minimal {
+  display: block;
+  width: 100%;
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--color-ink);
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid var(--color-line);
+  outline: none;
+  transition: border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.input-minimal:focus {
+  border-bottom-color: var(--color-brand);
+}
+
+.input-minimal::placeholder {
+  color: var(--color-faint);
+  opacity: 0.8;
+}
+
+/* Champ input minimaliste à ligne unique pour fond sombre */
+.input-minimal-dark {
+  display: block;
+  width: 100%;
+  padding: 10px 0;
+  font-size: 14px;
+  color: #ffffff;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.15);
+  outline: none;
+  transition: border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.input-minimal-dark:focus {
+  border-bottom-color: var(--color-brand);
+}
+
+.input-minimal-dark::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* ── Feature Cards & Hover Glows (Red, Blue, Gold, Purple, Dark) ── */
+.feature-card {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.feature-card:hover {
+  transform: translateY(-8px);
+}
+
+.feature-card-red:hover {
+  border-color: rgba(232, 23, 75, 0.3);
+  box-shadow: 0 16px 36px -12px rgba(232, 23, 75, 0.14);
+}
+
+.feature-card-blue:hover {
+  border-color: rgba(46, 111, 212, 0.3);
+  box-shadow: 0 16px 36px -12px rgba(46, 111, 212, 0.14);
+}
+
+.feature-card-gold:hover {
+  border-color: rgba(240, 165, 0, 0.3);
+  box-shadow: 0 16px 36px -12px rgba(240, 165, 0, 0.14);
+}
+
+.feature-card-purple:hover {
+  border-color: rgba(108, 63, 197, 0.3);
+  box-shadow: 0 16px 36px -12px rgba(108, 63, 197, 0.14);
+}
+
+.feature-card-dark:hover {
+  border-color: rgba(26, 26, 26, 0.35);
+  box-shadow: 0 16px 36px -12px rgba(26, 26, 26, 0.14);
+}
+
