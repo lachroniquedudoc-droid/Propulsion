@@ -30,6 +30,26 @@ function ConnexionContent() {
   const [successMessage, setSuccessMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  // Forgot password
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+    setForgotLoading(true);
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), { redirectTo });
+    setForgotLoading(false);
+    if (error) {
+      setErrorMessage(`Erreur : ${error.message}`);
+    } else {
+      setForgotSuccess(true);
+    }
+  };
+
   useEffect(() => {
     async function checkActiveSession() {
       try {
@@ -57,8 +77,15 @@ function ConnexionContent() {
       });
 
       if (error) {
+        const msg = error.message.toLowerCase();
         setErrorMessage(
-          "Identifiants incorrects. Veuillez vérifier votre adresse e-mail et votre mot de passe."
+          msg.includes("email not confirmed")
+            ? "Votre email n'est pas encore confirmé. Vérifiez votre boîte mail ou contactez l'administrateur."
+            : msg.includes("invalid login") || msg.includes("invalid credentials")
+              ? "Identifiants incorrects. Vérifiez votre adresse e-mail et mot de passe."
+              : msg.includes("rate limit") || msg.includes("too many")
+                ? "Trop de tentatives. Attendez quelques minutes avant de réessayer."
+                : `Erreur de connexion : ${error.message}`
         );
         setIsLoading(false);
       } else if (data?.user) {
@@ -219,7 +246,48 @@ function ConnexionContent() {
                 </div>
               )}
 
-              {/* Formulaire */}
+              {/* Modal mot de passe oublié */}
+              {forgotMode && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4">
+                  {forgotSuccess ? (
+                    <div className="flex items-start gap-3">
+                      <Check width={16} height={16} className="text-brand shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-[13px] font-semibold text-white">Email envoyé !</p>
+                        <p className="text-[12px] text-white/50 mt-0.5">
+                          Vérifiez votre boîte mail et cliquez sur le lien pour réinitialiser votre mot de passe.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleForgotPassword} className="space-y-3">
+                      <p className="text-[12px] text-white/50">
+                        Entrez votre adresse e-mail, nous vous enverrons un lien de réinitialisation.
+                      </p>
+                      <input
+                        type="email"
+                        required
+                        placeholder="prenom.nom@gmail.com"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        className="w-full bg-transparent border-b border-[#3A3A3A] focus:border-[#2E6FD4] outline-none text-[14px] text-white placeholder-white/30 pb-2"
+                      />
+                      <div className="flex gap-2 pt-1">
+                        <button type="button" onClick={() => setForgotMode(false)}
+                          className="flex-1 rounded-full border border-white/10 py-2.5 text-[12.5px] text-white/50 hover:text-white transition-colors">
+                          Annuler
+                        </button>
+                        <button type="submit" disabled={forgotLoading}
+                          className="flex-1 rounded-full bg-brand py-2.5 text-[12.5px] font-semibold text-white disabled:opacity-60">
+                          {forgotLoading ? "Envoi..." : "Envoyer le lien"}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* Formulaire connexion */}
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-sans font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-2">
@@ -242,12 +310,10 @@ function ConnexionContent() {
                     <label className="block text-[11px] font-sans font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-2">
                       Mot de passe
                     </label>
-                    <Link
-                      href="/rejoindre"
-                      className="text-[11px] text-brand/60 hover:text-brand transition-colors font-sans"
-                    >
+                    <button type="button" onClick={() => { setForgotMode(true); setForgotSuccess(false); setForgotEmail(email); }}
+                      className="text-[11px] text-brand/60 hover:text-brand transition-colors font-sans">
                       Mot de passe oublié ?
-                    </Link>
+                    </button>
                   </div>
                   <div className="relative">
                     <input
