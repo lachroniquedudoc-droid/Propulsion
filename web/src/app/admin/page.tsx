@@ -237,6 +237,17 @@ const CITY_ISO: [string, string][] = [
   ["émirats arabes unis","784"],["emirats arabes unis","784"],["uae","784"],["united arab emirates","784"]
 ];
 
+/* ─── Country names (ISO numeric → label) ────────────────────────── */
+const COUNTRY_NAMES: Record<string, string> = {
+  "120": "Cameroun", "384": "Côte d'Ivoire", "686": "Sénégal", "768": "Togo",
+  "204": "Bénin", "266": "Gabon", "178": "Congo-Brazzaville", "180": "RDC",
+  "566": "Nigeria", "288": "Ghana", "466": "Mali", "854": "Burkina Faso",
+  "324": "Guinée", "148": "Tchad", "646": "Rwanda", "250": "France",
+  "56": "Belgique", "124": "Canada", "826": "Royaume-Uni", "840": "États-Unis",
+  "276": "Allemagne", "724": "Espagne", "380": "Italie", "528": "Pays-Bas",
+  "756": "Suisse", "504": "Maroc", "788": "Tunisie", "784": "Émirats Arabes Unis",
+};
+
 /* ─── Badges de certification ─────────────────────────────────────── */
 const BADGES = [
   { id: "Certifié",          color: "#2E6FD4", bg: "#EEF5FF",  icon: "✓" },
@@ -1858,11 +1869,42 @@ export default function AdminPage() {
 
             {/* Geographical map */}
             <div className="rounded-2xl border border-[#E0DDD8] bg-white p-6 shadow-none">
-              <div className="mb-4">
-                <h3 className="text-[14px] font-sans font-bold text-[#1A1A1A]">Répartition géographique</h3>
-                <p className="text-[12px] text-[#6B6B6B] mt-0.5 font-sans">Membres Propulsion par pays</p>
+              <div className="mb-4 flex items-start justify-between">
+                <div>
+                  <h3 className="text-[14px] font-sans font-bold text-[#1A1A1A]">Répartition géographique</h3>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5 font-sans">Membres Propulsion par pays</p>
+                </div>
+                <span className="rounded-full bg-[#EEF5FF] px-3 py-1 text-[11px] font-bold text-[#2E6FD4] font-sans">
+                  {Object.values(geoData).reduce((a, b) => a + b, 0)} localisés
+                </span>
               </div>
               <GeoMap data={geoData}/>
+              {/* Country breakdown list */}
+              {Object.keys(geoData).length > 0 ? (
+                <div className="mt-5 space-y-2.5 border-t border-[#E0DDD8] pt-5">
+                  <p className="text-[11px] font-sans font-bold uppercase tracking-[0.1em] text-[#6B6B6B] mb-3">Par pays</p>
+                  {Object.entries(geoData)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([iso, count]) => {
+                      const name = COUNTRY_NAMES[iso] ?? `Pays ${iso}`;
+                      const maxCount = Math.max(...Object.values(geoData));
+                      const pct = Math.round((count / maxCount) * 100);
+                      return (
+                        <div key={iso} className="flex items-center gap-3">
+                          <span className="text-[12.5px] font-sans font-semibold text-[#1A1A1A] w-40 shrink-0 truncate">{name}</span>
+                          <div className="h-1.5 flex-1 bg-[#E0DDD8]/50 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-[#2E6FD4] transition-all" style={{ width: `${pct}%` }}/>
+                          </div>
+                          <span className="text-[12px] font-bold font-sans text-[#2E6FD4] w-6 text-right shrink-0">{count}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <p className="text-[12.5px] text-[#6B6B6B] font-sans text-center py-4 mt-4 border-t border-[#E0DDD8]">
+                  Aucune donnée géographique — les membres doivent renseigner leur ville à l&apos;inscription.
+                </p>
+              )}
             </div>
 
             {/* Recents and fast access */}
@@ -3642,11 +3684,42 @@ export default function AdminPage() {
 
             {/* Row 5 — Géo map */}
             <div className="rounded-2xl border border-[#E0DDD8] bg-white p-6 shadow-none">
-              <div className="mb-4">
-                <h3 className="text-[14px] font-sans font-bold text-[#1A1A1A]">Répartition géographique</h3>
-                <p className="text-[12px] text-[#6B6B6B] mt-0.5 font-sans">Membres Propulsion par pays</p>
+              <div className="mb-4 flex items-start justify-between">
+                <div>
+                  <h3 className="text-[14px] font-sans font-bold text-[#1A1A1A]">Répartition géographique</h3>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5 font-sans">Membres Propulsion par pays</p>
+                </div>
+                <span className="rounded-full bg-[#EEF5FF] px-3 py-1 text-[11px] font-bold text-[#2E6FD4] font-sans">
+                  {Object.values(geoData).reduce((a, b) => a + b, 0)} localisés
+                </span>
               </div>
               <GeoMap data={geoData}/>
+              {/* Country breakdown list */}
+              {Object.keys(geoData).length > 0 ? (
+                <div className="mt-5 space-y-2.5 border-t border-[#E0DDD8] pt-5">
+                  <p className="text-[11px] font-sans font-bold uppercase tracking-[0.1em] text-[#6B6B6B] mb-3">Par pays</p>
+                  {Object.entries(geoData)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([iso, count]) => {
+                      const name = COUNTRY_NAMES[iso] ?? `Pays ${iso}`;
+                      const maxCount = Math.max(...Object.values(geoData));
+                      const pct = Math.round((count / maxCount) * 100);
+                      return (
+                        <div key={iso} className="flex items-center gap-3">
+                          <span className="text-[12.5px] font-sans font-semibold text-[#1A1A1A] w-40 shrink-0 truncate">{name}</span>
+                          <div className="h-1.5 flex-1 bg-[#E0DDD8]/50 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-[#2E6FD4] transition-all" style={{ width: `${pct}%` }}/>
+                          </div>
+                          <span className="text-[12px] font-bold font-sans text-[#2E6FD4] w-6 text-right shrink-0">{count}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <p className="text-[12.5px] text-[#6B6B6B] font-sans text-center py-4 mt-4 border-t border-[#E0DDD8]">
+                  Aucune donnée géographique — les membres doivent renseigner leur ville à l&apos;inscription.
+                </p>
+              )}
             </div>
 
             {/* Row 6 — Activité récente */}

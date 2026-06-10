@@ -21,7 +21,8 @@ BEGIN
   INSERT INTO public.member_activity_logs (member_id, event_type, metadata)
   VALUES (NEW.member_id, 'challenge_submitted', jsonb_build_object(
     'challenge_id', NEW.challenge_id,
-    'url', NEW.submission_url
+    'challenge_week', NEW.challenge_week,
+    'url', NEW.deliverable_url
   ));
   RETURN NEW;
 END;
