@@ -109,7 +109,7 @@ type OnboardingSub = "paiements" | "marche" | "submissions" | "annuaire_add";
 
 type TeamMember = {
   member_id: string; first_name: string; last_name: string;
-  unique_id: string; avatar_url: string | null; created_at: string;
+  referral_code: string; avatar_url: string | null; created_at: string;
   total_referrals: number; conversions: number;
   total_commission: number; pending_payment: number; paid_commission: number;
 };
@@ -3797,7 +3797,7 @@ export default function AdminPage() {
                   .filter(t => !vendeurSearch || `${t.first_name} ${t.last_name}`.toLowerCase().includes(vendeurSearch.toLowerCase()))
                   .map(tm => {
                     const tc = "#E8174B";
-                    const link = `${typeof window !== "undefined" ? window.location.origin : "https://propulsion.com"}/rejoindre?ref=${tm.unique_id}`;
+                    const link = `${typeof window !== "undefined" ? window.location.origin : "https://propulsion.com"}/rejoindre?ref=${tm.referral_code}`;
                     const isExpanded = expandedVendeur === tm.member_id;
                     const refs = teamReferrals[tm.member_id] ?? [];
                     return (

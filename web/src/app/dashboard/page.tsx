@@ -29,7 +29,7 @@ const getCardTier = (member: MemberData) => {
 type MemberData = {
   id?: string;
   first_name: string; last_name: string; whatsapp: string;
-  role: string; status: string; unique_id: string;
+  role: string; status: string; unique_id: string; referral_code?: string;
   city: string; sector: string; company: string; bio: string; avatar_url: string;
   created_at?: string; subscription_expires_at?: string | null;
   is_private?: boolean; reputation_points?: number;
@@ -290,7 +290,7 @@ export default function DashboardPage() {
           { data: submissionsData },
           { data: referralsData },
         ] = await Promise.all([
-          supabase.from("members").select("id,first_name,last_name,whatsapp,role,status,unique_id,city,sector,company,bio,avatar_url,is_private,reputation_points,created_at,subscription_expires_at").eq("id", uid).single(),
+          supabase.from("members").select("id,first_name,last_name,whatsapp,role,status,unique_id,referral_code,city,sector,company,bio,avatar_url,is_private,reputation_points,created_at,subscription_expires_at").eq("id", uid).single(),
           supabase.from("content_progress").select("seconds_watched").eq("member_id", uid),
           supabase.from("challenge_submissions").select("status").eq("member_id", uid),
           supabase.from("referrals").select("commission").eq("referrer_id", uid),
@@ -309,10 +309,21 @@ export default function DashboardPage() {
           referralCommissions: referralsData ? referralsData.reduce((s, i) => s + Number(i.commission || 0), 0) : 0,
         }));
 
-        /* Vendeur : charger les détails de ses filleuls */
+        /* Vendeur : charger les détails de ses filleuls + Realtime */
         if (profileData?.role === "Vendeur") {
           const { data: vrData } = await supabase.rpc("get_my_referrals");
           if (vrData) setVendorReferrals(vrData as VendorReferral[]);
+
+          // Realtime: mise à jour live quand un nouveau filleul est validé
+          supabase.channel("vendor-referrals")
+            .on("postgres_changes", {
+              event: "INSERT", schema: "public", table: "referrals",
+              filter: `referrer_id=eq.${uid}`,
+            }, async () => {
+              const { data: fresh } = await supabase.rpc("get_my_referrals");
+              if (fresh) setVendorReferrals(fresh as VendorReferral[]);
+            })
+            .subscribe();
         }
 
         /* ── Focus card: priority logic ── */
@@ -406,8 +417,8 @@ export default function DashboardPage() {
 
   const isAdmin   = member.role === "Admin" || member.role === "Modérateur";
   const isVendeur = member.role === "Vendeur";
-  const vendorLink = typeof window !== "undefined" && member.unique_id
-    ? `${window.location.origin}/rejoindre?ref=${member.unique_id}` : "";
+  const vendorLink = typeof window !== "undefined" && member.referral_code
+    ? `${window.location.origin}/rejoindre?ref=${member.referral_code}` : "";
   const vendorTotalComm  = vendorReferrals.reduce((s, r) => s + (r.status === "Validé" ? Number(r.commission) : 0), 0);
   const vendorPending    = vendorReferrals.reduce((s, r) => s + (r.status === "Validé" && !r.paid_at ? Number(r.commission) : 0), 0);
   const vendorPaid       = vendorReferrals.reduce((s, r) => s + (r.paid_at ? Number(r.commission) : 0), 0);
