@@ -1,5 +1,6 @@
 "use client";
 
+import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 
 // Standard ISO mapping with Lat/Lng coordinates for tooltip center
@@ -84,33 +85,21 @@ function getChoroplethColor(count: number, maxCount: number): string {
 export function GeoMap({ data }: { data: Record<string, number> }) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const [cssLoaded, setCssLoaded] = useState(false);
   const [geoJson, setGeoJson] = useState<any>(null);
 
   const maxCount = Math.max(1, ...Object.keys(data).map(k => ISO_NUM_TO_ALPHA3[k] ? data[k] : 0));
 
-  // Dynamically load Leaflet CSS on mount
+  // Fetch local countries GeoJSON boundaries
   useEffect(() => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    link.onload = () => setCssLoaded(true);
-    document.head.appendChild(link);
-
-    // Fetch local countries GeoJSON boundaries
     fetch("/countries.geo.json")
       .then(res => res.json())
       .then(json => setGeoJson(json))
-      .catch(err => console.error("Error loading GeoJSON map data:", err));
-
-    return () => {
-      document.head.removeChild(link);
-    };
+      .catch(err => console.error("Error loading GeoJSON:", err));
   }, []);
 
   // Initialize and update Leaflet Map
   useEffect(() => {
-    if (!cssLoaded || !geoJson || !mapContainerRef.current) return;
+    if (!geoJson || !mapContainerRef.current) return;
 
     // Dynamically import Leaflet so it only runs in the browser
     import("leaflet").then((L) => {
@@ -204,7 +193,7 @@ export function GeoMap({ data }: { data: Record<string, number> }) {
         mapRef.current = null;
       }
     };
-  }, [cssLoaded, geoJson, data, maxCount]);
+  }, [geoJson, data, maxCount]);
 
   return (
     <div className="relative w-full rounded-xl border border-[#E0DDD8] overflow-hidden bg-[#F4F3F0]" style={{ height: "450px" }}>
