@@ -26,6 +26,7 @@ const getCardTier = (member: MemberData) => {
 };
 
 type MemberData = {
+  id?: string;
   first_name: string; last_name: string; whatsapp: string;
   role: string; status: string; unique_id: string;
   city: string; sector: string; company: string; bio: string; avatar_url: string;
@@ -34,6 +35,7 @@ type MemberData = {
 };
 
 const DEFAULT_MEMBER: MemberData = {
+  id: undefined,
   first_name: "", last_name: "", whatsapp: "",
   role: "Standard", status: "En attente de paiement", unique_id: "",
   city: "", sector: "", company: "", bio: "",
@@ -367,10 +369,10 @@ export default function DashboardPage() {
   const saveRevenue = (v: number) => { setActuals(p => ({ ...p, monthlyRevenueActual: v })); try { localStorage.setItem("propulsion_dashboard_revenue_actual", String(v)); } catch { /* ignore */ } };
   const saveContacts = (v: number) => { setActuals(p => ({ ...p, contactsMade: v }));       try { localStorage.setItem("propulsion_dashboard_contacts_made", String(v)); } catch { /* ignore */ } };
   const togglePrivacy = async () => {
+    if (!member.id) return;
     const next = !member.is_private;
     setUpdPri(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) await supabase.from("members").update({ is_private: next }).eq("id", user.id);
+    await supabase.from("members").update({ is_private: next }).eq("id", member.id);
     setMember(p => ({ ...p, is_private: next }));
     setUpdPri(false);
   };

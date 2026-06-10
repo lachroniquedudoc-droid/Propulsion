@@ -72,6 +72,13 @@ function generateTicketCode(userId: string): string {
   return `PROP-${ts}-${uid}`;
 }
 
+function getConfirmUrgency(eventDate: string): "ok" | "warning" | "urgent" {
+  const days = (new Date(eventDate).getTime() - Date.now()) / 86400000;
+  if (days <= 1) return "urgent";
+  if (days <= 3) return "warning";
+  return "ok";
+}
+
 function BrandBar() {
   return (
     <div className="flex h-[3px] w-full overflow-hidden rounded-full">
@@ -84,7 +91,11 @@ function BrandBar() {
 
 /* ─── Composant billet ──────────────────────────────────────────────────── */
 
-function TicketCard({ event, ticketCode }: { event: DerivedEvent; ticketCode: string; }) {
+function TicketCard({ event, ticketCode, confirmedAt, onConfirm }: {
+  event: DerivedEvent; ticketCode: string;
+  confirmedAt?: string | null; onConfirm?: () => void;
+}) {
+  const urgency = confirmedAt ? "done" : getConfirmUrgency(event.event_date);
   return (
     <div className="overflow-hidden rounded-2xl border border-[#E0DDD8] bg-white">
       <div className="px-5 py-3" style={{ background: event.color }}>
@@ -132,6 +143,26 @@ function TicketCard({ event, ticketCode }: { event: DerivedEvent; ticketCode: st
             Rejoindre sur Google Meet
           </a>
         )}
+
+        {/* Confirmation de présence */}
+        {urgency === "done" ? (
+          <div className="flex items-center gap-2 rounded-xl bg-[#22c55e]/10 px-4 py-3 text-[13px] font-semibold text-[#16a34a]">
+            <Check width={15} height={15}/> Présence confirmée
+          </div>
+        ) : (
+          <button onClick={onConfirm}
+            className={`w-full rounded-xl px-4 py-3 text-[13px] font-bold transition-all active:scale-[0.98] ${
+              urgency === "urgent"
+                ? "animate-pulse bg-[#ff1e58] text-white"
+                : urgency === "warning"
+                  ? "bg-[#ffac42] text-white"
+                  : "border border-brand/30 bg-brand/8 text-brand hover:bg-brand/15"
+            }`}>
+            {urgency === "urgent" ? "⚠ Confirmez maintenant — dernier délai !" :
+             urgency === "warning" ? "⏳ Confirmez votre présence (J-3)" :
+             "Confirmer ma présence"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -145,6 +176,7 @@ export default function EvenementsPage() {
   const [events, setEvents]               = useState<DerivedEvent[]>([]);
   const [registrations, setRegistrations] = useState<string[]>([]);
   const [tickets, setTickets]             = useState<Record<string, string>>({});
+  const [confirmations, setConfirmations] = useState<Record<string, string>>({});
   const [activeTicket, setActiveTicket]   = useState<string | null>(null);
   const [upsellFor, setUpsellFor]         = useState<string | null>(null);
   const [tab, setTab]                     = useState<"events" | "billets">("events");
@@ -172,15 +204,20 @@ export default function EvenementsPage() {
 
         const [{ data: m }, { data: regs }] = await Promise.all([
           supabase.from("members").select("role").eq("id", uid).single(),
-          supabase.from("event_registrations").select("event_id, ticket_code").eq("member_id", uid),
+          supabase.from("event_registrations").select("event_id,ticket_code,confirmed_at").eq("member_id", uid),
         ]);
 
         if (m?.role) setRole(m.role);
         if (regs) {
           setRegistrations(regs.map((r) => r.event_id));
-          const map: Record<string, string> = {};
-          regs.forEach((r) => { map[r.event_id] = r.ticket_code; });
-          setTickets(map);
+          const tmap: Record<string, string> = {};
+          const cmap: Record<string, string> = {};
+          regs.forEach((r) => {
+            tmap[r.event_id] = r.ticket_code;
+            if (r.confirmed_at) cmap[r.event_id] = r.confirmed_at;
+          });
+          setTickets(tmap);
+          setConfirmations(cmap);
         }
       },
     );
@@ -220,6 +257,17 @@ export default function EvenementsPage() {
       );
     }
     setLoading(false);
+  };
+
+  const handleConfirm = async (eventId: string) => {
+    if (!userId || confirmations[eventId]) return;
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("event_registrations")
+      .update({ confirmed_at: now })
+      .eq("member_id", userId)
+      .eq("event_id", eventId);
+    if (!error) setConfirmations(prev => ({ ...prev, [eventId]: now }));
   };
 
   const myEvents = events.filter((e) => registrations.includes(e.id));
@@ -351,6 +399,28 @@ export default function EvenementsPage() {
                         </a>
                       )}
 
+                      {/* Confirmation badge (registered only, before event) */}
+                      {isRegistered && new Date(evt.event_date) > new Date() && (() => {
+                        const confirmed = !!confirmations[evt.id];
+                        const urgency   = confirmed ? "done" : getConfirmUrgency(evt.event_date);
+                        return confirmed ? (
+                          <div className="mt-3 flex items-center gap-1.5 rounded-xl bg-[#22c55e]/10 px-3 py-2 text-[12px] font-semibold text-[#16a34a]">
+                            <Check width={13} height={13}/> Présence confirmée
+                          </div>
+                        ) : (
+                          <button onClick={() => handleConfirm(evt.id)}
+                            className={`mt-3 w-full rounded-xl px-3 py-2 text-[12.5px] font-bold transition-all active:scale-[0.98] ${
+                              urgency === "urgent" ? "animate-pulse bg-[#ff1e58] text-white" :
+                              urgency === "warning" ? "bg-[#ffac42] text-white" :
+                              "border border-brand/30 bg-brand/8 text-brand hover:bg-brand/15"
+                            }`}>
+                            {urgency === "urgent" ? "⚠ Confirmez maintenant — dernier délai !" :
+                             urgency === "warning" ? "⏳ Confirmez votre présence (J-3)" :
+                             "Confirmer ma présence"}
+                          </button>
+                        );
+                      })()}
+
                       {/* Footer */}
                       <div className="mt-4 flex items-center justify-between border-t border-[#E0DDD8] pt-3">
                         <span className="rounded-full px-2.5 py-1 text-[10.5px] font-bold"
@@ -424,7 +494,9 @@ export default function EvenementsPage() {
                         </button>
                         {isOpen && (
                           <div className="mt-2">
-                            <TicketCard event={evt} ticketCode={ticketCode}/>
+                            <TicketCard event={evt} ticketCode={ticketCode}
+                              confirmedAt={confirmations[evt.id]}
+                              onConfirm={() => handleConfirm(evt.id)}/>
                           </div>
                         )}
                       </div>
