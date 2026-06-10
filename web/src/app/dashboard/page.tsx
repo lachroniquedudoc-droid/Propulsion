@@ -250,6 +250,9 @@ export default function DashboardPage() {
 
   const [goals, setGoals] = useState({ monthlyRevenueGoal: 500000, weeklyNetworkingGoal: 5, weeklyMasterclassGoal: 60 });
   const [actuals, setActuals] = useState({ minutesWatched: 0, challengesCompleted: 0, contactsMade: 0, monthlyRevenueActual: 0, referralCommissions: 0 });
+  type VendorReferral = { referral_id: string; referred_name: string; tier: string; commission: number; status: string; paid_at: string | null; created_at: string; };
+  const [vendorReferrals, setVendorReferrals] = useState<VendorReferral[]>([]);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   type ActionItem = { type: "live"|"upcoming"|"challenge"; title: string; info: string; buttonText: string; href: string; };
   const [actionItem, setActionItem] = useState<ActionItem>({
@@ -305,6 +308,12 @@ export default function DashboardPage() {
           challengesCompleted: submissionsData ? submissionsData.filter(s => s.status === "Validé").length : 0,
           referralCommissions: referralsData ? referralsData.reduce((s, i) => s + Number(i.commission || 0), 0) : 0,
         }));
+
+        /* Vendeur : charger les détails de ses filleuls */
+        if (profileData?.role === "Vendeur") {
+          const { data: vrData } = await supabase.rpc("get_my_referrals");
+          if (vrData) setVendorReferrals(vrData as VendorReferral[]);
+        }
 
         /* ── Focus card: priority logic ── */
         const now      = new Date().toISOString();
@@ -395,7 +404,15 @@ export default function DashboardPage() {
 
   const feedItems = [feedMasterclass, feedChallenge, feedPost].filter(Boolean) as NonNullable<FeedItem>[];
 
-  const isAdmin = member.role === "Admin" || member.role === "Modérateur";
+  const isAdmin   = member.role === "Admin" || member.role === "Modérateur";
+  const isVendeur = member.role === "Vendeur";
+  const vendorLink = typeof window !== "undefined" && member.unique_id
+    ? `${window.location.origin}/rejoindre?ref=${member.unique_id}` : "";
+  const vendorTotalComm  = vendorReferrals.reduce((s, r) => s + (r.status === "Validé" ? Number(r.commission) : 0), 0);
+  const vendorPending    = vendorReferrals.reduce((s, r) => s + (r.status === "Validé" && !r.paid_at ? Number(r.commission) : 0), 0);
+  const vendorPaid       = vendorReferrals.reduce((s, r) => s + (r.paid_at ? Number(r.commission) : 0), 0);
+  const vendorConversions = vendorReferrals.filter(r => r.status === "Validé").length;
+  const fmtFcfa = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : `${n.toLocaleString("fr-FR")} FCFA`;
 
   const today = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
@@ -590,6 +607,84 @@ export default function DashboardPage() {
               </div>
             )}
           </section>
+
+          {/* ── Section Vendeur Propulsion ──────────────────────────── */}
+          {isVendeur && (
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="h-[3px] w-6 rounded-full bg-[#E8174B]"/>
+                <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B6B6B] font-sans">
+                  Équipe Propulsion · Mes ventes
+                </h2>
+              </div>
+
+              {/* Lien de parrainage */}
+              <div className="rounded-2xl border border-[#E0DDD8] bg-white p-5 space-y-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B] font-sans">Votre lien personnel</p>
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 truncate text-[12px] font-mono text-[#1A1A1A] bg-[#F4F3F0] rounded-lg px-3 py-2">{vendorLink || "—"}</span>
+                  <button
+                    onClick={() => {
+                      if (vendorLink) {
+                        navigator.clipboard?.writeText(vendorLink);
+                        setLinkCopied(true);
+                        setTimeout(() => setLinkCopied(false), 2000);
+                      }
+                    }}
+                    className="h-9 px-4 rounded-full font-semibold text-[12px] text-white transition-all active:scale-95 shrink-0"
+                    style={{ background: linkCopied ? "#1D6B45" : levelColor }}
+                  >
+                    {linkCopied ? "Copié ✓" : "Copier"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-[#6B6B6B] font-sans">
+                  Partagez ce lien — chaque inscription via votre lien génère une commission.
+                </p>
+              </div>
+
+              {/* KPIs vendeur */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Conversions",    value: vendorConversions.toString(),  color: "#2E6FD4" },
+                  { label: "Commissions",    value: fmtFcfa(vendorTotalComm),      color: "#1D6B45" },
+                  { label: "À recevoir",     value: fmtFcfa(vendorPending),        color: "#F0A500" },
+                  { label: "Déjà reçu",      value: fmtFcfa(vendorPaid),           color: "#6C3FC5" },
+                ].map((k, i) => (
+                  <div key={i} className="rounded-xl border border-[#E0DDD8] bg-white p-4 space-y-1">
+                    <p className="font-serif text-[22px] font-bold leading-none" style={{ color: k.color }}>{k.value}</p>
+                    <p className="text-[10px] font-sans font-bold uppercase tracking-wider text-[#6B6B6B]">{k.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Dernières conversions */}
+              {vendorReferrals.length > 0 && (
+                <div className="rounded-2xl border border-[#E0DDD8] bg-white overflow-hidden">
+                  <div className="px-5 py-3 border-b border-[#E0DDD8]">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B] font-sans">Dernières conversions</p>
+                  </div>
+                  <div className="divide-y divide-[#E0DDD8]">
+                    {vendorReferrals.slice(0, 5).map(r => (
+                      <div key={r.referral_id} className="flex items-center gap-3 px-5 py-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12.5px] font-semibold text-[#1A1A1A] font-sans">{r.referred_name}</p>
+                          <p className="text-[11px] text-[#6B6B6B] font-sans">{r.tier} · {new Date(r.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-[12px] font-bold font-sans" style={{ color: r.status === "Validé" ? "#1D6B45" : "#F0A500" }}>
+                            {fmtFcfa(Number(r.commission))}
+                          </p>
+                          <p className="text-[10px] font-sans" style={{ color: r.paid_at ? "#6C3FC5" : r.status === "Validé" ? "#1D6B45" : "#F0A500" }}>
+                            {r.paid_at ? "Payé" : r.status}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
         </div>
 

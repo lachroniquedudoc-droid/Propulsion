@@ -104,8 +104,19 @@ type AdminSubmission = {
   challenge: { title: string; points: number } | null;
 };
 
-type Tab = "overview" | "onboarding" | "members" | "content" | "annuaire" | "settings" | "analytics";
+type Tab = "overview" | "onboarding" | "members" | "content" | "annuaire" | "settings" | "analytics" | "equipe";
 type OnboardingSub = "paiements" | "marche" | "submissions" | "annuaire_add";
+
+type TeamMember = {
+  member_id: string; first_name: string; last_name: string;
+  unique_id: string; avatar_url: string | null; created_at: string;
+  total_referrals: number; conversions: number;
+  total_commission: number; pending_payment: number; paid_commission: number;
+};
+type TeamReferral = {
+  referral_id: string; referred_name: string; tier: string;
+  commission: number; status: string; paid_at: string | null; created_at: string;
+};
 type ContentSub = "masterclasses" | "challenges" | "evenements" | "ressources" | "publications";
 
 /* ─── Level Colors ────────────────────────────────────────────────── */
@@ -585,6 +596,12 @@ export default function AdminPage() {
   const [stats, setStats]             = useState<Stats | null>(null);
   const [geoData, setGeoData]         = useState<Record<string, number>>({});
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [teamMembers, setTeamMembers]   = useState<TeamMember[]>([]);
+  const [teamReferrals, setTeamReferrals] = useState<Record<string, TeamReferral[]>>({});
+  const [expandedVendeur, setExpandedVendeur] = useState<string | null>(null);
+  const [vendeurSearch, setVendeurSearch] = useState("");
+  const [addVendeurSearch, setAddVendeurSearch] = useState("");
+  const [addVendeurResults, setAddVendeurResults] = useState<Member[]>([]);
 
   const [systemSettings, setSystemSettings] = useState<{
     maintenanceMode: boolean;
@@ -820,6 +837,10 @@ export default function AdminPage() {
     setTopContributors(topC);
     setMonthlyGrowth12(growth12);
     setActivityLogs((logsData as unknown as ActivityLog[]) ?? []);
+
+    /* Équipe Propulsion — stats via RPC */
+    const { data: teamData } = await supabase.rpc("get_team_stats");
+    setTeamMembers((teamData as unknown as TeamMember[]) ?? []);
   }, []);
 
   useEffect(() => {
@@ -1235,6 +1256,60 @@ export default function AdminPage() {
       setSaving(false);
     }
   };
+  /* ── Équipe Propulsion ──────────────────────────────────────────── */
+  async function assignVendeur(member: Member) {
+    await supabase.from("members").update({ role: "Vendeur" }).eq("id", member.id);
+    setMembers(m => m.map(x => x.id === member.id ? { ...x, role: "Vendeur" } : x));
+    notify(`${member.first_name} ${member.last_name} ajouté à l'équipe Propulsion.`);
+    const { data: teamData } = await supabase.rpc("get_team_stats");
+    setTeamMembers((teamData as unknown as TeamMember[]) ?? []);
+    setAddVendeurResults([]);
+    setAddVendeurSearch("");
+  }
+  async function removeVendeur(tm: TeamMember) {
+    await supabase.from("members").update({ role: "Standard" }).eq("id", tm.member_id);
+    setTeamMembers(prev => prev.filter(x => x.member_id !== tm.member_id));
+    notify(`${tm.first_name} ${tm.last_name} retiré de l'équipe.`, false);
+  }
+  async function markVendeurPaid(tm: TeamMember) {
+    const now = new Date().toISOString();
+    await supabase.from("referrals")
+      .update({ paid_at: now })
+      .eq("referrer_id", tm.member_id)
+      .eq("status", "Validé")
+      .is("paid_at", null);
+    const { data: teamData } = await supabase.rpc("get_team_stats");
+    setTeamMembers((teamData as unknown as TeamMember[]) ?? []);
+    notify(`Commission de ${tm.first_name} marquée comme payée.`);
+  }
+  async function loadVendeurReferrals(memberId: string) {
+    if (teamReferrals[memberId]) {
+      setExpandedVendeur(expandedVendeur === memberId ? null : memberId);
+      return;
+    }
+    const { data } = await supabase
+      .from("referrals")
+      .select("id,tier,commission,status,paid_at,created_at,referred:members!referred_id(first_name,last_name)")
+      .eq("referrer_id", memberId)
+      .order("created_at", { ascending: false });
+    const formatted = (data ?? []).map((r: any) => ({
+      referral_id: r.id, referred_name: `${r.referred?.first_name ?? ""} ${(r.referred?.last_name ?? "").slice(0,1)}.`,
+      tier: r.tier, commission: r.commission, status: r.status, paid_at: r.paid_at, created_at: r.created_at,
+    }));
+    setTeamReferrals(prev => ({ ...prev, [memberId]: formatted }));
+    setExpandedVendeur(memberId);
+  }
+  async function searchAddVendeur(q: string) {
+    setAddVendeurSearch(q);
+    if (q.trim().length < 2) { setAddVendeurResults([]); return; }
+    const { data } = await supabase.from("members")
+      .select("id,first_name,last_name,role,avatar_url")
+      .ilike("first_name", `%${q}%`)
+      .neq("role", "Vendeur").neq("role", "Admin").neq("role", "Modérateur")
+      .limit(5);
+    setAddVendeurResults((data as Member[]) ?? []);
+  }
+
   async function sendMemberEmailReminders() {
     try {
       setSaving(true);
@@ -1585,6 +1660,7 @@ export default function AdminPage() {
     { id: "members",    label: "Membres" },
     { id: "content",    label: "Contenu" },
     { id: "annuaire",   label: "Annuaire" },
+    { id: "equipe",     label: "Équipe", badge: teamMembers.length || undefined },
     { id: "analytics",  label: "Analytics" },
     { id: "settings",   label: "Paramètres" },
   ];
@@ -3632,6 +3708,192 @@ export default function AdminPage() {
               )}
             </div>
 
+          </div>
+        )}
+
+        {/* ── Onglet Équipe Propulsion ─────────────────────────────────── */}
+        {tab === "equipe" && (
+          <div className="space-y-6">
+
+            {/* Header */}
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div>
+                <h2 className="font-serif text-[22px] font-bold text-[#1A1A1A]">Équipe Propulsion</h2>
+                <p className="text-[13px] text-[#6B6B6B] font-sans mt-1">
+                  Vendeurs actifs · Suivi des conversions et commissions
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="rounded-full bg-[#1D6B45]/10 px-4 py-1.5 text-[12px] font-bold text-[#1D6B45] font-sans">
+                  {teamMembers.length} vendeur{teamMembers.length !== 1 ? "s" : ""}
+                </div>
+                <div className="rounded-full bg-[#F0A500]/10 px-4 py-1.5 text-[12px] font-bold text-[#F0A500] font-sans">
+                  {fmtAmount(teamMembers.reduce((s, t) => s + Number(t.pending_payment), 0))} à payer
+                </div>
+              </div>
+            </div>
+
+            {/* KPIs équipe */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: "Conversions totales", value: teamMembers.reduce((s,t)=>s+Number(t.conversions),0).toString(), color: "#2E6FD4", bg: "#EEF5FF" },
+                { label: "CA généré",           value: fmtAmount(teamMembers.reduce((s,t)=>s+Number(t.total_commission),0)), color: "#1D6B45", bg: "#E8F5EE" },
+                { label: "Commissions dues",    value: fmtAmount(teamMembers.reduce((s,t)=>s+Number(t.pending_payment),0)), color: "#F0A500", bg: "#FFFAEB" },
+                { label: "Commissions payées",  value: fmtAmount(teamMembers.reduce((s,t)=>s+Number(t.paid_commission),0)), color: "#6C3FC5", bg: "#F3EEFF" },
+              ].map((k, i) => (
+                <div key={i} className="rounded-2xl border border-[#E0DDD8] bg-white p-5 shadow-none space-y-3">
+                  <p className="text-[11px] font-sans font-bold uppercase tracking-[0.1em] text-[#6B6B6B]">{k.label}</p>
+                  <p className="font-serif text-[26px] font-bold leading-none" style={{ color: k.color }}>{k.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Ajouter un vendeur */}
+            <div className="rounded-2xl border border-[#E0DDD8] bg-white p-6 shadow-none">
+              <h3 className="text-[14px] font-sans font-bold text-[#1A1A1A] mb-4">Ajouter un vendeur</h3>
+              <div className="relative max-w-sm">
+                <input
+                  value={addVendeurSearch}
+                  onChange={e => searchAddVendeur(e.target.value)}
+                  placeholder="Rechercher un membre par prénom…"
+                  className="w-full border-b border-[#E0DDD8] focus:border-[#2E6FD4] bg-transparent outline-none text-[14px] font-sans pb-2 pr-8"
+                />
+                {addVendeurResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 rounded-xl border border-[#E0DDD8] bg-white shadow-lg z-10 overflow-hidden">
+                    {addVendeurResults.map(m => (
+                      <button key={m.id} onClick={() => assignVendeur(m)}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F4F3F0] transition-colors text-left cursor-pointer">
+                        {m.avatar_url
+                          ? <img src={m.avatar_url} className="h-8 w-8 rounded-full object-cover shrink-0" alt="" />
+                          : <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white bg-[#2E6FD4]">{initials(m)}</span>}
+                        <div>
+                          <p className="text-[13px] font-semibold font-sans text-[#1A1A1A]">{m.first_name} {m.last_name}</p>
+                          <p className="text-[11px] text-[#6B6B6B] font-sans">{m.role}</p>
+                        </div>
+                        <span className="ml-auto text-[11px] font-bold text-[#1D6B45]">+ Ajouter</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Liste vendeurs */}
+            {teamMembers.length === 0 ? (
+              <AdminEmptyState
+                title="Aucun vendeur pour l'instant"
+                subtitle="Ajoutez des membres à l'équipe Propulsion pour suivre leurs conversions et commissions."
+              />
+            ) : (
+              <div className="space-y-3">
+                {/* Barre recherche */}
+                <div className="relative max-w-xs">
+                  <input value={vendeurSearch} onChange={e => setVendeurSearch(e.target.value)}
+                    placeholder="Filtrer par nom…"
+                    className="w-full border-b border-[#E0DDD8] bg-transparent outline-none text-[13px] font-sans pb-1.5" />
+                </div>
+
+                {teamMembers
+                  .filter(t => !vendeurSearch || `${t.first_name} ${t.last_name}`.toLowerCase().includes(vendeurSearch.toLowerCase()))
+                  .map(tm => {
+                    const tc = "#E8174B";
+                    const link = `${typeof window !== "undefined" ? window.location.origin : "https://propulsion.com"}/rejoindre?ref=${tm.unique_id}`;
+                    const isExpanded = expandedVendeur === tm.member_id;
+                    const refs = teamReferrals[tm.member_id] ?? [];
+                    return (
+                      <div key={tm.member_id} className="rounded-2xl border border-[#E0DDD8] bg-white shadow-none overflow-hidden">
+                        {/* Row principale */}
+                        <div className="flex items-center gap-4 px-6 py-4 flex-wrap">
+                          {/* Avatar */}
+                          {tm.avatar_url
+                            ? <img src={tm.avatar_url} className="h-10 w-10 rounded-full object-cover shrink-0" alt="" />
+                            : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white font-sans" style={{ background: tc }}>
+                                {(tm.first_name[0] + tm.last_name[0]).toUpperCase()}
+                              </span>}
+                          {/* Nom + lien */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[14px] font-bold text-[#1A1A1A] font-sans">{tm.first_name} {tm.last_name}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[11px] text-[#6B6B6B] font-sans truncate max-w-[220px]">{link}</span>
+                              <button onClick={() => { navigator.clipboard?.writeText(link); notify("Lien copié !"); }}
+                                className="shrink-0 text-[10px] font-bold text-[#2E6FD4] hover:underline cursor-pointer">
+                                Copier
+                              </button>
+                            </div>
+                          </div>
+                          {/* Stats */}
+                          <div className="flex items-center gap-6 text-center shrink-0">
+                            <div>
+                              <p className="font-serif text-[22px] font-bold text-[#1A1A1A]">{tm.conversions}</p>
+                              <p className="text-[10px] font-sans text-[#6B6B6B] uppercase tracking-wide">Convs.</p>
+                            </div>
+                            <div>
+                              <p className="font-serif text-[18px] font-bold text-[#1D6B45]">{fmtAmount(Number(tm.total_commission))}</p>
+                              <p className="text-[10px] font-sans text-[#6B6B6B] uppercase tracking-wide">Total</p>
+                            </div>
+                            <div>
+                              <p className="font-serif text-[18px] font-bold text-[#F0A500]">{fmtAmount(Number(tm.pending_payment))}</p>
+                              <p className="text-[10px] font-sans text-[#6B6B6B] uppercase tracking-wide">À payer</p>
+                            </div>
+                          </div>
+                          {/* Actions */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {Number(tm.pending_payment) > 0 && (
+                              <button onClick={() => markVendeurPaid(tm)}
+                                className="h-8 px-3 bg-[#1D6B45] text-white rounded-lg text-[12px] font-semibold hover:opacity-90 transition-all cursor-pointer">
+                                Payé ✓
+                              </button>
+                            )}
+                            <button onClick={() => loadVendeurReferrals(tm.member_id)}
+                              className="h-8 px-3 bg-[#F4F3F0] text-[#1A1A1A] rounded-lg text-[12px] font-semibold hover:bg-[#E0DDD8] transition-all cursor-pointer">
+                              {isExpanded ? "Masquer" : "Détails"}
+                            </button>
+                            <button onClick={() => setConfirmDialog({ title: "Retirer de l'équipe", message: `${tm.first_name} redeviendra membre Standard. Ses commissions validées sont conservées.`, confirmText: "Retirer", cancelText: "Annuler", isDanger: true, onConfirm: () => removeVendeur(tm) })}
+                              className="h-8 px-3 bg-[#F4F3F0] text-[#E8174B] rounded-lg text-[12px] font-semibold hover:bg-[#FFF0F3] transition-all cursor-pointer">
+                              Retirer
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Détails referrals */}
+                        {isExpanded && (
+                          <div className="border-t border-[#E0DDD8]">
+                            {refs.length === 0 ? (
+                              <p className="px-6 py-4 text-[13px] text-[#6B6B6B] font-sans">Aucune conversion enregistrée.</p>
+                            ) : (
+                              <table className="w-full text-[12px] font-sans">
+                                <thead>
+                                  <tr className="bg-[#F4F3F0]">
+                                    {["Membre", "Niveau", "Commission", "Statut", "Payé le", "Date"].map(h => (
+                                      <th key={h} className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#E0DDD8]">
+                                  {refs.map(r => (
+                                    <tr key={r.referral_id} className="hover:bg-[#F4F3F0] transition-colors">
+                                      <td className="px-4 py-2.5 font-semibold text-[#1A1A1A]">{r.referred_name}</td>
+                                      <td className="px-4 py-2.5">
+                                        <span className="rounded-full px-2 py-0.5 text-[9px] font-bold" style={{ background: `${TIER_COLOR[r.tier] ?? "#6B6B6B"}15`, color: TIER_COLOR[r.tier] ?? "#6B6B6B" }}>{r.tier}</span>
+                                      </td>
+                                      <td className="px-4 py-2.5 font-bold text-[#1D6B45]">{fmtAmount(Number(r.commission))}</td>
+                                      <td className="px-4 py-2.5">
+                                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${r.status === "Validé" ? "bg-[#1D6B45]/10 text-[#1D6B45]" : "bg-[#F0A500]/10 text-[#F0A500]"}`}>{r.status}</span>
+                                      </td>
+                                      <td className="px-4 py-2.5 text-[#6B6B6B]">{r.paid_at ? new Date(r.paid_at).toLocaleDateString("fr-FR") : "—"}</td>
+                                      <td className="px-4 py-2.5 text-[#6B6B6B]">{new Date(r.created_at).toLocaleDateString("fr-FR")}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </div>
         )}
 
