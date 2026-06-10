@@ -41,6 +41,7 @@ type AdminEvent = {
   id: string; title: string; description: string; event_date: string;
   event_type: string; location: string; meet_link: string | null; price: number;
   spots_max: number | null; tier_required: string; created_at: string;
+  event_registrations?: { id: string; confirmed_at: string | null }[];
 };
 type AdminPost = {
   id: string; title: string; content: string; category: string; created_at: string;
@@ -66,6 +67,11 @@ type Resource = {
 type Stats = {
   total: number; active: number; pending_payments: number;
   elite: number; new_this_week: number; revenue: number;
+};
+type ActivityLog = {
+  id: string; member_id: string; event_type: string;
+  metadata: Record<string, unknown>; created_at: string;
+  member: { first_name: string; last_name: string; role: string } | null;
 };
 
 type AdminChallenge = {
@@ -578,6 +584,7 @@ export default function AdminPage() {
   const [pendingSubmissions, setPendingSubmissions] = useState<AdminSubmission[]>([]);
   const [stats, setStats]             = useState<Stats | null>(null);
   const [geoData, setGeoData]         = useState<Record<string, number>>({});
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
 
   const [systemSettings, setSystemSettings] = useState<{
     maintenanceMode: boolean;
@@ -721,7 +728,7 @@ export default function AdminPage() {
 
       /* Contenu */
       supabase.from("masterclasses").select("id,title,description,youtube_id,category,tier_required,duration_min,is_published,created_at").order("order_index"),
-      supabase.from("events").select("id,title,description,event_date,event_type,location,meet_link,price,spots_max,tier_required,image_url,created_at").order("event_date",{ascending:false}),
+      supabase.from("events").select("id,title,description,event_date,event_type,location,meet_link,price,spots_max,tier_required,image_url,created_at,event_registrations(id,confirmed_at)").order("event_date",{ascending:false}),
       supabase.from("social_posts").select("id,title,content,category,created_at,author:members!author_id(first_name,last_name)").order("created_at",{ascending:false}).limit(50),
 
       /* Validation Marché */
@@ -750,6 +757,13 @@ export default function AdminPage() {
       supabase.from("challenge_submissions").select("*",{count:"exact",head:true}),
       supabase.from("challenge_submissions").select("*",{count:"exact",head:true}).eq("status","Validé"),
     ]);
+
+    /* Logs d'activité — séparés car non critiques */
+    const { data: logsData } = await supabase
+      .from("member_activity_logs")
+      .select("id,member_id,event_type,metadata,created_at,member:members!member_id(first_name,last_name,role)")
+      .order("created_at", { ascending: false })
+      .limit(100);
 
     /* ── Membres : source de vérité pour tous les dérivés ── */
     const allMembers = (mems as Member[]) ?? [];
@@ -805,6 +819,7 @@ export default function AdminPage() {
     setAnalyticsRevByTier(byTier);
     setTopContributors(topC);
     setMonthlyGrowth12(growth12);
+    setActivityLogs((logsData as unknown as ActivityLog[]) ?? []);
   }, []);
 
   useEffect(() => {
@@ -2744,6 +2759,19 @@ export default function AdminPage() {
                               <span>·</span>
                               <span>{e.location}</span>
                               <span className="rounded-full px-1.5 py-0.5 text-[9.5px] font-bold" style={{ background: `${tc}15`, color: tc }}>{e.tier_required}</span>
+                              {e.event_registrations && (() => {
+                                const total = e.event_registrations.length;
+                                const confirmed = e.event_registrations.filter(r => r.confirmed_at).length;
+                                return total > 0 ? (
+                                  <span className="flex items-center gap-1">
+                                    <span className="text-[#1A1A1A] font-semibold">{total} inscrits</span>
+                                    <span>·</span>
+                                    <span className={confirmed === total ? "text-[#16a34a] font-semibold" : "text-[#ffac42] font-semibold"}>
+                                      {confirmed} confirmé{confirmed > 1 ? "s" : ""}
+                                    </span>
+                                  </span>
+                                ) : null;
+                              })()}
                             </div>
                           </div>
                         </div>
@@ -3543,6 +3571,65 @@ export default function AdminPage() {
                 <p className="text-[12px] text-[#6B6B6B] mt-0.5 font-sans">Membres Propulsion par pays</p>
               </div>
               <GeoMap data={geoData}/>
+            </div>
+
+            {/* Row 6 — Activité récente */}
+            <div className="rounded-2xl border border-[#E0DDD8] bg-white shadow-none overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-5 border-b border-[#E0DDD8]">
+                <div>
+                  <h3 className="text-[14px] font-sans font-bold text-[#1A1A1A]">Activité récente</h3>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5 font-sans">100 dernières actions membres</p>
+                </div>
+                <span className="flex items-center gap-1.5 rounded-full bg-[#2E6FD4]/10 px-3 py-1.5 text-[11px] font-bold text-[#2E6FD4] font-sans">
+                  {activityLogs.length} entrées
+                </span>
+              </div>
+              {activityLogs.length === 0 ? (
+                <p className="text-[13px] text-[#6B6B6B] font-sans text-center py-10">Aucune activité enregistrée.</p>
+              ) : (
+                <div className="divide-y divide-[#E0DDD8]">
+                  {activityLogs.map(log => {
+                    const EVENT_META: Record<string, { label: string; color: string; icon: string }> = {
+                      dashboard_viewed:    { label: "Connexion",            color: "#2E6FD4", icon: "◉" },
+                      masterclass_viewed:  { label: "Masterclass vue",      color: "#6C3FC5", icon: "▶" },
+                      resource_downloaded: { label: "Ressource téléch.",    color: "#1D6B45", icon: "↓" },
+                      event_registered:    { label: "Inscription événement", color: "#F0A500", icon: "📅" },
+                      challenge_submitted: { label: "Challenge soumis",     color: "#E8174B", icon: "⚡" },
+                      post_created:        { label: "Publication",          color: "#0D9488", icon: "✍" },
+                      offer_submitted:     { label: "Offre marché",         color: "#C9A84C", icon: "🏪" },
+                      payment_submitted:   { label: "Paiement soumis",      color: "#1D6B45", icon: "💳" },
+                    };
+                    const meta = EVENT_META[log.event_type] ?? { label: log.event_type, color: "#6B6B6B", icon: "·" };
+                    const memberName = log.member
+                      ? `${log.member.first_name} ${log.member.last_name}`
+                      : log.member_id.slice(0, 8) + "…";
+                    const memberRole = log.member?.role ?? "Standard";
+                    const tc = TIER_COLOR[memberRole] ?? "#6B6B6B";
+                    const extraLabel = (() => {
+                      const m = log.metadata as Record<string, unknown>;
+                      if (log.event_type === "masterclass_viewed" && m.title) return String(m.title);
+                      if (log.event_type === "resource_downloaded" && m.title) return String(m.title);
+                      if (log.event_type === "offer_submitted" && m.title) return String(m.title);
+                      if (log.event_type === "payment_submitted" && m.amount) return `${Number(m.amount).toLocaleString("fr-FR")} FCFA`;
+                      return null;
+                    })();
+                    return (
+                      <div key={log.id} className="flex items-center gap-4 px-6 py-3 hover:bg-[#F4F3F0] transition-colors">
+                        <span className="text-[16px] shrink-0 w-6 text-center">{meta.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[13px] font-semibold text-[#1A1A1A] font-sans">{memberName}</span>
+                            <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold font-sans" style={{ background: `${tc}15`, color: tc }}>{memberRole}</span>
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-bold font-sans" style={{ background: `${meta.color}12`, color: meta.color }}>{meta.label}</span>
+                            {extraLabel && <span className="text-[11px] text-[#6B6B6B] font-sans truncate max-w-[200px]">{extraLabel}</span>}
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-[11px] text-[#6B6B6B] font-sans">{relativeTime(log.created_at)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
           </div>

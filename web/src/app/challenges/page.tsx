@@ -14,8 +14,8 @@ type Challenge = {
   deadline: string|null; tier_required: string; is_active: boolean;
 };
 type Submission = {
-  id: string; challenge_id: string|null; submission_url: string;
-  description: string|null; status: string; created_at: string;
+  id: string; challenge_id: string|null; challenge_week: number;
+  deliverable_url: string; comments: string|null; status: string; created_at: string;
 };
 type LeaderEntry = { id:string; first_name:string; last_name:string; avatar_url:string|null; reputation_points:number; role:string };
 
@@ -58,13 +58,13 @@ export default function ChallengesPage() {
   const loadData = useCallback(async (uid:string) => {
     const [{ data:challenges }, { data:subs }, { data:lead }] = await Promise.all([
       supabase.from("challenges").select("id,week_number,title,context,objective,mission,deliverable,resources,category,difficulty,points,deadline,tier_required,is_active").order("week_number", { ascending:false }).limit(50),
-      supabase.from("challenge_submissions").select("id,challenge_id,submission_url,description,status,created_at").eq("member_id",uid).order("created_at",{ascending:false}).limit(100),
+      supabase.from("challenge_submissions").select("id,challenge_id,challenge_week,deliverable_url,comments,status,created_at").eq("member_id",uid).order("created_at",{ascending:false}).limit(100),
       supabase.from("members").select("id,first_name,last_name,avatar_url,reputation_points,role").order("reputation_points",{ascending:false}).limit(10),
     ]);
     const all = (challenges??[]) as Challenge[];
     setActive(all.find(c=>c.is_active)??null);
     setPast(all.filter(c=>!c.is_active));
-    setSubmissions((subs??[]) as Submission[]);
+    setSubmissions((subs??[]) as unknown as Submission[]);
     setLeaders((lead??[]) as LeaderEntry[]);
   },[]);
 
@@ -89,8 +89,8 @@ export default function ChallengesPage() {
     if (locked) return;
     setSubmitting(true);
     const { error } = await supabase.from("challenge_submissions").insert({
-      member_id: userId, challenge_id: active.id,
-      submission_url: url.trim(), description: desc.trim()||null, status:"En cours",
+      member_id: userId, challenge_id: active.id, challenge_week: active.week_number,
+      deliverable_url: url.trim(), comments: desc.trim()||null, status:"En cours",
     });
     if (!error) { setSubmitted(true); setUrl(""); setDesc(""); await loadData(userId); }
     setSubmitting(false);
@@ -279,9 +279,9 @@ export default function ChallengesPage() {
                       <p className="text-[13px] font-bold text-ink leading-snug">{ch?.title??"Sprint"}</p>
                       <StatusBadge status={s.status}/>
                     </div>
-                    <a href={s.submission_url} target="_blank" rel="noopener noreferrer"
-                      className="text-[12px] text-brand hover:underline truncate block">{s.submission_url}</a>
-                    {s.description && <p className="mt-2 text-[12px] text-muted leading-relaxed">{s.description}</p>}
+                    <a href={s.deliverable_url} target="_blank" rel="noopener noreferrer"
+                      className="text-[12px] text-brand hover:underline truncate block">{s.deliverable_url}</a>
+                    {s.comments && <p className="mt-2 text-[12px] text-muted leading-relaxed">{s.comments}</p>}
                     <p className="mt-2 text-[11px] text-faint">
                       {new Date(s.created_at).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}
                     </p>

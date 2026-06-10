@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
 import { Check, ArrowRight, PlayCircle, Star } from "@/components/icons";
+import { logActivity } from "@/utils/activity";
 
 /* ─── Types ──────────────────────────────────────────────────── */
 
@@ -111,13 +112,14 @@ export default function CoursePlayerPage({ params }: { params: Promise<{ id: str
       setCurrentIdx(firstIncomplete >= 0 ? firstIncomplete : 0);
     }
 
-    // Marquer comme "démarré" (1 sec) pour la progression globale
+    // Marquer comme "démarré" (1 sec) pour la progression globale + log activité
     if (uid) {
       try {
         await supabase.from("content_progress").upsert(
           { member_id: uid, masterclass_id: id, seconds_watched: 1 },
           { onConflict: "member_id,masterclass_id" }
         );
+        logActivity(uid, "masterclass_viewed", { masterclass_id: id, title: c.title });
       } catch { /* ignore */ }
     }
 

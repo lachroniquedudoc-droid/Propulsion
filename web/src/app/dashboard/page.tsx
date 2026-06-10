@@ -7,6 +7,7 @@ import { MemberLayout } from "@/components/member-layout";
 import { AiAgent } from "@/components/ai-agent";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { Check, Settings, Close, ArrowRight, Wallet, Users, BookOpen } from "@/components/icons";
+import { logActivity } from "@/utils/activity";
 
 /* ─── Helpers ───────────────────────────────────────────────────── */
 const getLevelColor = (role: string) => {
@@ -278,6 +279,7 @@ export default function DashboardPage() {
       if (event !== "INITIAL_SESSION") return;
       if (!session?.user) { window.location.href = "/connexion"; return; }
       const uid = session.user.id;
+      logActivity(uid, "dashboard_viewed");
       try {
         const [
           { data: profileData },
@@ -336,11 +338,11 @@ export default function DashboardPage() {
 
         /* ── Feed data ── */
         const [{ data: mc }, { data: ch }, { data: post }] = await Promise.all([
-          supabase.from("masterclasses").select("id,title,category").eq("is_published", true).order("order_index").limit(1).single(),
-          supabase.from("challenges").select("id,title,week_number").eq("is_active", true).order("week_number", { ascending: false }).limit(1).single(),
+          supabase.from("masterclasses").select("id,title,category").eq("is_published", true).order("order_index").limit(1).maybeSingle(),
+          supabase.from("challenges").select("id,title,week_number").eq("is_active", true).order("week_number", { ascending: false }).limit(1).maybeSingle(),
           supabase.from("social_posts")
             .select("id,content,category,author:members!author_id(first_name,last_name)")
-            .order("created_at", { ascending: false }).limit(1).single(),
+            .order("created_at", { ascending: false }).limit(1).maybeSingle(),
         ]);
 
         if (mc) setFeedMasterclass({ id: mc.id, category: mc.category || "Formation", title: mc.title,

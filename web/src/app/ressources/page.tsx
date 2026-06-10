@@ -5,6 +5,7 @@ import { supabase } from "@/utils/supabase/client";
 import { MemberLayout } from "@/components/member-layout";
 import { AiAgent } from "@/components/ai-agent";
 import { FolderOpen, Shield, ExternalLink, Star, Crown } from "@/components/icons";
+import { logActivity } from "@/utils/activity";
 
 type Resource = {
   id: string; title: string; description: string; category: string;
@@ -70,6 +71,7 @@ export default function RessourcesPage() {
     setDownloading(res.id);
     await supabase.from("resources").update({ download_count: res.download_count + 1 }).eq("id", res.id);
     setResources(prev => prev.map(r => r.id === res.id ? { ...r, download_count: r.download_count + 1 } : r));
+    logActivity(userId, "resource_downloaded", { resource_id: res.id, title: res.title, category: res.category });
     const raw = res.file_url || res.external_url;
     if (raw) {
       /* Strip Supabase Storage download param so browser renders inline */
