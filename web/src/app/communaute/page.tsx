@@ -79,15 +79,40 @@ function normalizePost(raw: Record<string, unknown>): PostRow {
   };
 }
 
+const RICH_CONTENT_PATTERN = /(@[\wÀ-ž]+(?:\s[\wÀ-ž]+)?|https?:\/\/[^\s<]+|www\.[^\s<]+)/g;
+const TRAILING_PUNCT = /[.,;:!?)\]]+$/;
+
 function RichContent({ text }: { text: string }) {
-  const parts = text.split(/(@[\wÀ-ž]+(?:\s[\wÀ-ž]+)?)/g);
+  const parts = text.split(RICH_CONTENT_PATTERN);
   return (
     <span>
-      {parts.map((p, i) =>
-        p.startsWith("@")
-          ? <span key={i} className="font-semibold text-brand">{p}</span>
-          : p
-      )}
+      {parts.map((p, i) => {
+        if (!p) return null;
+        if (p.startsWith("@")) {
+          return <span key={i} className="font-semibold text-brand">{p}</span>;
+        }
+        if (/^(https?:\/\/|www\.)/i.test(p)) {
+          const trailingMatch = p.match(TRAILING_PUNCT);
+          const trailing = trailingMatch ? trailingMatch[0] : "";
+          const display = trailing ? p.slice(0, -trailing.length) : p;
+          const href = display.startsWith("www.") ? `https://${display}` : display;
+          return (
+            <span key={i}>
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="font-medium text-brand underline underline-offset-2 break-all hover:text-brand/80"
+              >
+                {display}
+              </a>
+              {trailing}
+            </span>
+          );
+        }
+        return p;
+      })}
     </span>
   );
 }
