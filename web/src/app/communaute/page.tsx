@@ -314,20 +314,41 @@ export default function CommunautePage() {
 
   useEffect(() => {
     if (!currentUser) return;
-    const channel = supabase
-      .channel("kpaka-feed")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "social_posts" }, async payload => {
-        if (payload.new.author_id === currentUser.id) return;
-        const { data } = await supabase.from("social_posts").select(getPostSelect(hasMentions, hasBadges)).eq("id", payload.new.id).single();
-        if (data) {
-          setPosts(prev => {
-            if (prev.some(p => p.id === (data as unknown as PostRow).id)) return prev;
-            return [normalizePost(data as unknown as Record<string, unknown>), ...prev];
-          });
-        }
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let active = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    try {
+      channel = supabase
+        .channel("kpaka-feed")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "social_posts" }, async payload => {
+          if (!active || payload.new.author_id === currentUser.id) return;
+          try {
+            const { data } = await supabase.from("social_posts").select(getPostSelect(hasMentions, hasBadges)).eq("id", payload.new.id).single();
+            if (data && active) {
+              setPosts(prev => {
+                if (prev.some(p => p.id === (data as unknown as PostRow).id)) return prev;
+                return [normalizePost(data as unknown as Record<string, unknown>), ...prev];
+              });
+            }
+          } catch {
+            // Non-bloquant : un post réel reste consultable via le rechargement de la page.
+          }
+        })
+        .subscribe((status) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            // Realtime indisponible (réseau mobile, etc.) — le fil reste fonctionnel
+            // en lecture/écriture classique, seule la mise à jour live est perdue.
+            supabase.removeChannel(channel!);
+          }
+        });
+    } catch {
+      // L'abonnement Realtime ne doit jamais empêcher le reste de la page de fonctionner.
+    }
+
+    return () => {
+      active = false;
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [currentUser, hasMentions, hasBadges]);
 
   async function toggleLike(postId: string) {
