@@ -536,6 +536,20 @@ export default function CommunautePage() {
                       </div>
                     )}
 
+                    {/* Action row — ajout photo (mis en avant, distinct des catégories) */}
+                    <div className="flex items-center gap-2 px-4 pb-3">
+                      <button type="button" onClick={() => fileRef.current?.click()}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold transition-all active:scale-[0.97] ${
+                          imagePreview
+                            ? "bg-brand text-white"
+                            : "bg-brand/8 text-brand border border-brand/25 hover:bg-brand/15 hover:border-brand/50"
+                        }`}>
+                        <Camera width={15} height={15}/>
+                        {imagePreview ? "Changer la photo" : "Ajouter une photo"}
+                      </button>
+                      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect}/>
+                    </div>
+
                     {/* Bottom toolbar */}
                     <div className="flex items-center justify-between gap-2 border-t border-[#E0DDD8] bg-[#F4F3F0]/50 px-4 py-2.5">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -546,11 +560,6 @@ export default function CommunautePage() {
                             {c}
                           </button>
                         ))}
-                        <button type="button" title="Ajouter une photo" onClick={() => fileRef.current?.click()}
-                          className="flex h-7 w-7 items-center justify-center rounded-full bg-white border border-[#E0DDD8] text-muted hover:border-brand/40 hover:text-brand transition-colors">
-                          <Camera width={13} height={13}/>
-                        </button>
-                        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect}/>
                       </div>
                       <button type="submit" disabled={submitting || !draft.content.trim()}
                         className="rounded-full bg-brand px-4 py-1.5 text-[12.5px] font-bold text-white hover:bg-brand/90 transition-all active:scale-[0.97] disabled:opacity-40 shrink-0">
