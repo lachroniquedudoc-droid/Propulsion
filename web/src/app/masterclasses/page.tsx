@@ -190,7 +190,7 @@ export default function MasterclassesPage() {
                         <span className="rounded-full px-2 py-0.5 text-[9px] font-bold text-white uppercase tracking-wider" style={{ background: catColor }}>
                           {mc.category}
                         </span>
-                        {mc.tier_required !== "Standard" && (
+                        {mc.tier_required !== "Standard" && mc.tier_required !== "Tous" && (
                           <span className="rounded-full px-2 py-0.5 text-[9px] font-bold text-white uppercase tracking-wider" style={{ background: tierColor }}>
                             {mc.tier_required}
                           </span>

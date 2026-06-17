@@ -35,7 +35,7 @@ type DerivedEvent = DbEvent & {
 
 /* ─── Constantes ────────────────────────────────────────────────────────── */
 
-const TIER_RANK: Record<string, number> = { Standard: 1, Pro: 2, Élite: 3 };
+const TIER_RANK: Record<string, number> = { Tous: 0, Standard: 1, Pro: 2, Élite: 3 };
 
 const TIER_COLOR: Record<string, string> = {
   Standard: "#766391",
@@ -326,8 +326,10 @@ export default function EvenementsPage() {
                       <div className="relative h-44 w-full overflow-hidden bg-neutral-900">
                         <img src={evt.image_url} alt="" className="h-full w-full object-cover"/>
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"/>
-                        <span className="absolute bottom-3 right-3 rounded-full px-2.5 py-0.5 text-[10px] font-bold text-white"
-                          style={{ background: evt.color }}>{evt.tier_required}</span>
+                        {evt.tier_required !== "Standard" && evt.tier_required !== "Tous" && (
+                          <span className="absolute bottom-3 right-3 rounded-full px-2.5 py-0.5 text-[10px] font-bold text-white"
+                            style={{ background: evt.color }}>{evt.tier_required}</span>
+                        )}
                       </div>
                     ) : (
                       <div className="h-1.5 w-full" style={{ background: evt.color }}/>

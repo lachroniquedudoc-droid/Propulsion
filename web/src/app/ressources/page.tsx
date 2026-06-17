@@ -164,7 +164,7 @@ export default function RessourcesPage() {
                           <div className="mt-1 flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] font-semibold text-faint">{res.category}</span>
                             <span className="text-[10px] font-bold" style={{ color: ts.text }}>{res.resource_type}</span>
-                            {res.tier_required !== "Standard" && (
+                            {res.tier_required !== "Standard" && res.tier_required !== "Tous" && (
                               <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white" style={{ background: tc }}>
                                 {res.tier_required}
                               </span>

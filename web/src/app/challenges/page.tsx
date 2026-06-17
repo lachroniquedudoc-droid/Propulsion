@@ -153,7 +153,7 @@ export default function ChallengesPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold text-white" style={{background:DIFF_COLOR[active.difficulty]??"#3871c2"}}>{active.difficulty}</span>
                           <span className="rounded-full bg-[#ffac42]/15 px-2.5 py-0.5 text-[10px] font-bold text-[#b87a00]">+{active.points} pts</span>
-                          {active.tier_required!=="Standard" && (
+                          {active.tier_required!=="Standard" && active.tier_required!=="Tous" && (
                             <span className="rounded-full bg-brand/10 px-2.5 py-0.5 text-[10px] font-bold text-brand">{active.tier_required}</span>
                           )}
                         </div>

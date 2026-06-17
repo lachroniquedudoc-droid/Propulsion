@@ -121,9 +121,11 @@ type ContentSub = "masterclasses" | "challenges" | "evenements" | "ressources" |
 
 /* ─── Level Colors ────────────────────────────────────────────────── */
 const TIER_COLOR: Record<string, string> = {
+  Tous: "#22c55e",
   Standard: "#2E6FD4",
   Pro: "#6C3FC5",
   Élite: "#C9A84C",
+  Vendeur: "#F97316",
   Modérateur: "#E8174B",
   Admin: "#1A1A1A",
 };
@@ -2464,7 +2466,19 @@ export default function AdminPage() {
                       <AdminUnderlineInput label="Titre" value={mc.title} onChange={(e: any) => setMc({...mc, title: e.target.value})} placeholder="Construire sa force commerciale" required />
                       <AdminUnderlineInput label="Orateur / Formateur" value={mc.instructor} onChange={(e: any) => setMc({...mc, instructor: e.target.value})} placeholder="Dr Claudel Noubissie" />
                       <AdminUnderlineTextarea label="Description" value={mc.description} onChange={(e: any) => setMc({...mc, description: e.target.value})} placeholder="Sujet, objectifs..." />
-                      <AdminUnderlineInput label="Lien ou ID Vidéo premier module (YouTube / Vimeo - optionnel)" value={mc.youtubeId} onChange={(e: any) => setMc({...mc, youtubeId: e.target.value})} placeholder="Ex: https://vimeo.com/... ou https://youtube.com/watch?v=..." />
+                      <AdminUnderlineInput label="Lien ou ID Vidéo premier module (YouTube / Vimeo - optionnel)" value={mc.youtubeId} onChange={(e: any) => {
+                        const val = e.target.value;
+                        setMc(prev => ({...prev, youtubeId: val}));
+                        // Auto-preview YouTube thumbnail
+                        if (!thumbnailFile && !mc.thumbnailUrl) {
+                          const parsed = parseVideoUrl(val);
+                          if (parsed && !parsed.startsWith("vimeo:")) {
+                            setThumbnailPreview(`https://img.youtube.com/vi/${parsed}/mqdefault.jpg`);
+                          } else {
+                            setThumbnailPreview(null);
+                          }
+                        }
+                      }} placeholder="Ex: https://vimeo.com/... ou https://youtube.com/watch?v=..." />
                       
                       <div className="grid grid-cols-2 gap-4">
                         <AdminUnderlineSelect label="Type de cours" value={mc.courseType} onChange={(e: any) => setMc({...mc, courseType: e.target.value})}>
@@ -2478,7 +2492,7 @@ export default function AdminPage() {
 
                       <div className="grid grid-cols-2 gap-4">
                         <AdminUnderlineSelect label="Niveau requis" value={mc.tier} onChange={(e: any) => setMc({...mc, tier: e.target.value})}>
-                          {["Standard","Pro","Élite"].map(t => <option key={t}>{t}</option>)}
+                          {["Tous","Standard","Pro","Élite"].map(t => <option key={t}>{t}</option>)}
                         </AdminUnderlineSelect>
                         <AdminUnderlineInput label="Durée totale estimée (min)" value={mc.duration} onChange={(e: any) => setMc({...mc, duration: e.target.value})} type="number" />
                       </div>
@@ -2697,7 +2711,7 @@ export default function AdminPage() {
                         <AdminUnderlineInput label="Heure Limite" value={chForm.deadlineTime} onChange={(e: any) => setChForm({...chForm, deadlineTime: e.target.value})} type="time" />
                         
                         <AdminUnderlineSelect label="Niveau requis" value={chForm.tier} onChange={(e: any) => setChForm({...chForm, tier: e.target.value})}>
-                          {["Standard", "Pro", "Élite"].map(t => <option key={t} value={t}>{t}</option>)}
+                          {["Tous", "Standard", "Pro", "Élite"].map(t => <option key={t} value={t}>{t}</option>)}
                         </AdminUnderlineSelect>
                       </div>
 
@@ -2807,7 +2821,7 @@ export default function AdminPage() {
                         </AdminUnderlineSelect>
                         
                         <AdminUnderlineSelect label="Niveau requis" value={ev.tier} onChange={(e: any) => setEv({...ev, tier: e.target.value})}>
-                          {["Standard","Pro","Élite"].map(t => <option key={t}>{t}</option>)}
+                          {["Tous","Standard","Pro","Élite"].map(t => <option key={t}>{t}</option>)}
                         </AdminUnderlineSelect>
                         
                         <AdminUnderlineInput label="Prix (FCFA)" value={ev.price} onChange={(e: any) => setEv({...ev, price: e.target.value})} type="number" />
@@ -2937,7 +2951,7 @@ export default function AdminPage() {
                           {["PDF","Guide","Vidéo","Outil","Template","Lien","Autre"].map(t => <option key={t}>{t}</option>)}
                         </AdminUnderlineSelect>
                         <AdminUnderlineSelect label="Niveau requis" value={res.tier} onChange={(e: any) => setRes({...res, tier: e.target.value})}>
-                          {["Standard","Pro","Élite"].map(t => <option key={t}>{t}</option>)}
+                          {["Tous","Standard","Pro","Élite"].map(t => <option key={t}>{t}</option>)}
                         </AdminUnderlineSelect>
                       </div>
 
