@@ -46,7 +46,7 @@ BEGIN
       NEW.id, NEW.first_name, NEW.last_name, NEW.company, NEW.sector, NEW.city,
       NEW.phone, NEW.email, NEW.whatsapp, NEW.bio, NEW.avatar_url, true
     )
-    ON CONFLICT (member_id) DO UPDATE SET
+    ON CONFLICT (member_id) WHERE member_id IS NOT NULL DO UPDATE SET
       first_name   = EXCLUDED.first_name,
       last_name    = EXCLUDED.last_name,
       company      = EXCLUDED.company,
@@ -106,7 +106,7 @@ SELECT
   m.phone, m.email, m.whatsapp, m.bio, m.avatar_url, true
 FROM public.members m
 WHERE m.status = 'Actif'
-ON CONFLICT (member_id) DO UPDATE SET
+ON CONFLICT (member_id) WHERE member_id IS NOT NULL DO UPDATE SET
   first_name   = EXCLUDED.first_name,
   last_name    = EXCLUDED.last_name,
   company      = EXCLUDED.company,
