@@ -86,7 +86,7 @@ BEGIN
 
   IF (
     SELECT COUNT(*)
-    FROM public.post_comments
+    FROM public.social_comments
     WHERE author_id = NEW.author_id
       AND created_at > NOW() - INTERVAL '1 hour'
   ) >= 60 THEN
@@ -96,9 +96,9 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS tr_comment_rate_limit ON public.post_comments;
+DROP TRIGGER IF EXISTS tr_comment_rate_limit ON public.social_comments;
 CREATE TRIGGER tr_comment_rate_limit
-  BEFORE INSERT ON public.post_comments
+  BEFORE INSERT ON public.social_comments
   FOR EACH ROW EXECUTE FUNCTION public.check_comment_rate_limit();
 
 -- ─── 5. Index manquants sur notifications (cloche) ───────────────────────────
