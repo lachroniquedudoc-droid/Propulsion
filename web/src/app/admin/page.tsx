@@ -616,6 +616,12 @@ export default function AdminPage() {
   const [addVendeurSearch, setAddVendeurSearch] = useState("");
   const [addVendeurResults, setAddVendeurResults] = useState<Member[]>([]);
 
+  /* ── Admin / Modérateur management ── */
+  const [adminMembers,     setAdminMembers]     = useState<Member[]>([]);
+  const [addAdminSearch,   setAddAdminSearch]   = useState("");
+  const [addAdminResults,  setAddAdminResults]  = useState<Member[]>([]);
+  const [promoteRole,      setPromoteRole]      = useState<"Admin" | "Modérateur">("Modérateur");
+
   const [systemSettings, setSystemSettings] = useState<{
     maintenanceMode: boolean;
     maintenanceMessage: string;
@@ -854,6 +860,15 @@ export default function AdminPage() {
     /* Équipe Propulsion — stats via RPC */
     const { data: teamData } = await supabase.rpc("get_team_stats");
     setTeamMembers((teamData as unknown as TeamMember[]) ?? []);
+
+    /* Admins & Modérateurs actuels */
+    const { data: adminsData } = await supabase
+      .from("members")
+      .select("id,first_name,last_name,role,avatar_url,status,city,sector,created_at,badges,reputation_points,whatsapp")
+      .in("role", ["Admin", "Modérateur"])
+      .order("role")
+      .order("first_name");
+    setAdminMembers((adminsData as Member[]) ?? []);
   }, []);
 
   useEffect(() => {
@@ -1321,6 +1336,34 @@ export default function AdminPage() {
       .neq("role", "Vendeur").neq("role", "Admin").neq("role", "Modérateur")
       .limit(5);
     setAddVendeurResults((data as Member[]) ?? []);
+  }
+
+  /* ── Admin / Modérateur management ─────────────────────────────── */
+  async function searchAddAdmin(q: string) {
+    setAddAdminSearch(q);
+    if (q.trim().length < 2) { setAddAdminResults([]); return; }
+    const { data } = await supabase.from("members")
+      .select("id,first_name,last_name,role,avatar_url,status,city,sector,created_at,badges,reputation_points,whatsapp")
+      .ilike("first_name", `%${q}%`)
+      .not("role", "in", '("Admin","Modérateur")')
+      .limit(8);
+    setAddAdminResults((data as Member[]) ?? []);
+  }
+
+  async function promoteToAdminRole(member: Member) {
+    await supabase.from("members").update({ role: promoteRole }).eq("id", member.id);
+    setMembers(m => m.map(x => x.id === member.id ? { ...x, role: promoteRole } : x));
+    setAdminMembers(prev => [...prev, { ...member, role: promoteRole }].sort((a, b) => a.role.localeCompare(b.role) || a.first_name.localeCompare(b.first_name)));
+    setAddAdminResults([]);
+    setAddAdminSearch("");
+    notify(`${member.first_name} ${member.last_name} promu·e ${promoteRole}.`);
+  }
+
+  async function demoteAdminMember(member: Member, previousRole: string) {
+    await supabase.from("members").update({ role: previousRole }).eq("id", member.id);
+    setAdminMembers(prev => prev.filter(x => x.id !== member.id));
+    setMembers(m => m.map(x => x.id === member.id ? { ...x, role: previousRole } : x));
+    notify(`${member.first_name} ${member.last_name} repassé·e en ${previousRole}.`);
   }
 
   async function sendMemberEmailReminders() {
@@ -3807,16 +3850,178 @@ export default function AdminPage() {
               <div>
                 <h2 className="font-serif text-[22px] font-bold text-[#1A1A1A]">Équipe Propulsion</h2>
                 <p className="text-[13px] text-[#6B6B6B] font-sans mt-1">
-                  Vendeurs actifs · Suivi des conversions et commissions
+                  Administrateurs, modérateurs et vendeurs
                 </p>
               </div>
               <div className="flex items-center gap-3">
+                <div className="rounded-full bg-[#1A1A1A]/10 px-4 py-1.5 text-[12px] font-bold text-[#1A1A1A] font-sans">
+                  {adminMembers.length} admin{adminMembers.length !== 1 ? "s" : ""}
+                </div>
                 <div className="rounded-full bg-[#1D6B45]/10 px-4 py-1.5 text-[12px] font-bold text-[#1D6B45] font-sans">
                   {teamMembers.length} vendeur{teamMembers.length !== 1 ? "s" : ""}
                 </div>
-                <div className="rounded-full bg-[#F0A500]/10 px-4 py-1.5 text-[12px] font-bold text-[#F0A500] font-sans">
-                  {fmtAmount(teamMembers.reduce((s, t) => s + Number(t.pending_payment), 0))} à payer
+              </div>
+            </div>
+
+            {/* ── SECTION : Admins & Modérateurs ───────────────────────── */}
+            <div className="rounded-2xl border border-[#E0DDD8] bg-white overflow-hidden shadow-none">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0DDD8] bg-[#F4F3F0]">
+                <div>
+                  <h3 className="text-[14px] font-bold text-[#1A1A1A] font-sans">Admins & Modérateurs</h3>
+                  <p className="text-[11px] text-[#6B6B6B] font-sans mt-0.5">Membres avec accès élevé à la plateforme</p>
                 </div>
+                <span className="rounded-full bg-[#1A1A1A] px-3 py-1 text-[11px] font-bold text-white font-sans">
+                  {adminMembers.length} membre{adminMembers.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {/* Liste admins actuels */}
+              {adminMembers.length === 0 ? (
+                <div className="px-6 py-8 text-center">
+                  <p className="text-[13px] text-[#6B6B6B] font-sans">Aucun autre admin ou modérateur pour l&apos;instant.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-[#E0DDD8]/60">
+                  {adminMembers.map(m => {
+                    const isCurrentAdmin = m.id === adminUid;
+                    const roleColor = m.role === "Admin" ? "#1A1A1A" : "#E8174B";
+                    return (
+                      <div key={m.id} className="flex items-center gap-4 px-6 py-4">
+                        {m.avatar_url
+                          ? <img src={m.avatar_url} className="h-10 w-10 rounded-full object-cover shrink-0" alt="" />
+                          : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white font-sans"
+                              style={{ background: roleColor }}>
+                              {(m.first_name[0] + m.last_name[0]).toUpperCase()}
+                            </span>
+                        }
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[14px] font-bold text-[#1A1A1A] font-sans">{m.first_name} {m.last_name}</p>
+                            {isCurrentAdmin && (
+                              <span className="rounded-full bg-[#2E6FD4]/10 px-2 py-0.5 text-[9px] font-bold text-[#2E6FD4] font-sans uppercase tracking-wider">Vous</span>
+                            )}
+                          </div>
+                          <span className="inline-flex items-center gap-1.5 mt-0.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold font-sans"
+                            style={{ background: `${roleColor}12`, color: roleColor }}>
+                            {m.role === "Admin" ? "⚙ Admin" : "🛡 Modérateur"}
+                          </span>
+                        </div>
+                        {/* Actions — désactiver pour soi-même */}
+                        {!isCurrentAdmin && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            {m.role === "Modérateur" && (
+                              <button
+                                onClick={() => setConfirmDialog({
+                                  title: `Promouvoir en Admin`,
+                                  message: `Êtes-vous sûr·e de vouloir donner les droits Admin complets à ${m.first_name} ${m.last_name} ? Cette action est sensible.`,
+                                  confirmText: "Oui, promouvoir",
+                                  isDanger: false,
+                                  onConfirm: async () => {
+                                    await supabase.from("members").update({ role: "Admin" }).eq("id", m.id);
+                                    setAdminMembers(prev => prev.map(x => x.id === m.id ? { ...x, role: "Admin" } : x));
+                                    setMembers(prev => prev.map(x => x.id === m.id ? { ...x, role: "Admin" } : x));
+                                    notify(`${m.first_name} promu·e Admin.`);
+                                  },
+                                })}
+                                className="h-8 px-3 rounded-lg border border-[#1A1A1A]/20 text-[11px] font-bold text-[#1A1A1A] font-sans hover:bg-[#1A1A1A]/5 transition-colors cursor-pointer"
+                              >
+                                Promouvoir Admin
+                              </button>
+                            )}
+                            {m.role === "Admin" && (
+                              <button
+                                onClick={() => setConfirmDialog({
+                                  title: `Rétrograder en Modérateur`,
+                                  message: `${m.first_name} ${m.last_name} perdra l'accès complet Admin et passera en Modérateur.`,
+                                  confirmText: "Rétrograder",
+                                  isDanger: false,
+                                  onConfirm: () => demoteAdminMember(m, "Modérateur"),
+                                })}
+                                className="h-8 px-3 rounded-lg border border-[#6B6B6B]/20 text-[11px] font-bold text-[#6B6B6B] font-sans hover:bg-[#6B6B6B]/5 transition-colors cursor-pointer"
+                              >
+                                Rétrograder Modo
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setConfirmDialog({
+                                title: `Retirer les droits de ${m.first_name}`,
+                                message: `${m.first_name} ${m.last_name} repassera en membre Standard. Cette action est irréversible sans une nouvelle promotion.`,
+                                confirmText: "Retirer les droits",
+                                isDanger: true,
+                                onConfirm: () => demoteAdminMember(m, "Standard"),
+                              })}
+                              className="h-8 px-3 rounded-lg border border-[#E8174B]/20 text-[11px] font-bold text-[#E8174B] font-sans hover:bg-red-50 transition-colors cursor-pointer"
+                            >
+                              Retirer
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Promouvoir un nouveau membre */}
+              <div className="px-6 py-5 border-t border-[#E0DDD8] bg-[#F4F3F0]">
+                <h4 className="text-[12px] font-bold text-[#1A1A1A] font-sans mb-3">Nommer un nouvel admin ou modérateur</h4>
+                <div className="flex flex-wrap gap-3 items-end">
+                  {/* Choix du rôle */}
+                  <div className="flex rounded-xl border border-[#E0DDD8] overflow-hidden bg-white shrink-0">
+                    {(["Modérateur", "Admin"] as const).map(r => (
+                      <button key={r} onClick={() => setPromoteRole(r)}
+                        className="px-4 py-2 text-[12px] font-bold font-sans transition-colors cursor-pointer"
+                        style={{
+                          background: promoteRole === r ? "#1A1A1A" : "transparent",
+                          color: promoteRole === r ? "#FFFFFF" : "#6B6B6B",
+                        }}>
+                        {r === "Admin" ? "⚙ Admin" : "🛡 Modérateur"}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Recherche membre */}
+                  <div className="relative flex-1 min-w-[220px]">
+                    <input
+                      value={addAdminSearch}
+                      onChange={e => searchAddAdmin(e.target.value)}
+                      placeholder="Rechercher un membre par prénom…"
+                      className="w-full rounded-xl border border-[#E0DDD8] bg-white px-4 py-2.5 text-[13px] font-sans outline-none focus:border-[#1A1A1A]/40"
+                    />
+                    {addAdminResults.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 rounded-xl border border-[#E0DDD8] bg-white shadow-[0_8px_32px_rgba(0,0,0,0.10)] z-10 overflow-hidden">
+                        {addAdminResults.map(r => (
+                          <button key={r.id} onClick={() => setConfirmDialog({
+                              title: `Nommer ${r.first_name} ${r.last_name} ${promoteRole}`,
+                              message: `${r.first_name} aura accès au panneau d'administration Propulsion avec le rôle ${promoteRole}. Confirmez-vous cette action ?`,
+                              confirmText: `Oui, nommer ${promoteRole}`,
+                              isDanger: false,
+                              onConfirm: () => promoteToAdminRole(r),
+                            })}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F4F3F0] transition-colors text-left cursor-pointer border-b border-[#E0DDD8]/40 last:border-0">
+                            {r.avatar_url
+                              ? <img src={r.avatar_url} className="h-8 w-8 rounded-full object-cover shrink-0" alt="" />
+                              : <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white bg-[#1A1A1A]">
+                                  {(r.first_name[0] + r.last_name[0]).toUpperCase()}
+                                </span>
+                            }
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] font-bold text-[#1A1A1A] font-sans">{r.first_name} {r.last_name}</p>
+                              <p className="text-[11px] text-[#6B6B6B] font-sans">{r.role} · {r.city || "–"}</p>
+                            </div>
+                            <span className="ml-auto text-[11px] font-bold shrink-0"
+                              style={{ color: promoteRole === "Admin" ? "#1A1A1A" : "#E8174B" }}>
+                              + {promoteRole}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-2.5 text-[11px] text-[#6B6B6B] font-sans">
+                  ⚠️ Les Admins ont un accès complet à tous les réglages. Les Modérateurs peuvent valider les paiements et modérer le contenu.
+                </p>
               </div>
             </div>
 
