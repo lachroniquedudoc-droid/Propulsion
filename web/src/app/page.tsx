@@ -437,8 +437,8 @@ export default function Home() {
               {/* Large card */}
               <Reveal delay={0} className="md:col-span-7">
                 <Bezel accentColor={C.blue} className="h-full">
-                  <div className="p-8 h-full flex flex-col justify-between min-h-[240px]">
-                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center mb-6"
+                  <div className="p-8 flex flex-col gap-6">
+                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
                       style={{ background: `${C.blue}12`, color: C.blue }}>
                       <Ico.Video />
                     </div>
