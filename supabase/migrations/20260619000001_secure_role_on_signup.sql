@@ -10,17 +10,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, extensions
 AS $$
-DECLARE
-  v_role text;
 BEGIN
-  -- N'accepter que Standard / Pro / Élite depuis les métadonnées de signup.
-  -- Tout autre rôle (Admin, Modérateur, ou valeur inconnue) est forcé à Standard.
-  v_role := CASE
-    WHEN new.raw_user_meta_data->>'role' IN ('Standard', 'Pro', 'Élite')
-    THEN new.raw_user_meta_data->>'role'
-    ELSE 'Standard'
-  END;
-
   INSERT INTO public.members (
     id,
     first_name,
@@ -33,10 +23,13 @@ BEGIN
     coalesce(new.raw_user_meta_data->>'first_name', 'Membre'),
     coalesce(new.raw_user_meta_data->>'last_name', ''),
     coalesce(new.raw_user_meta_data->>'whatsapp', ''),
-    v_role,
+    CASE
+      WHEN new.raw_user_meta_data->>'role' IN ('Standard', 'Pro', 'Élite')
+      THEN new.raw_user_meta_data->>'role'
+      ELSE 'Standard'
+    END,
     'En attente de paiement'
   );
-
   RETURN new;
 END;
 $$;
