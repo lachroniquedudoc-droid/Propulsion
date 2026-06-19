@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
-import { Check, ArrowRight, PlayCircle, Star } from "@/components/icons";
+import { Check, ArrowRight, PlayCircle } from "@/components/icons";
 import { logActivity } from "@/utils/activity";
 
 /* ── Types ──────────────────────────────────────────────── */
@@ -23,8 +23,7 @@ type ModuleProgress = { completed: boolean; seconds_watched: number };
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
-const TIER_ORDER: Record<string,number> = { Standard:0, Pro:1, Élite:2 };
-const CAT_COLOR:  Record<string,string> = {
+const CAT_COLOR: Record<string,string> = {
   Vente:"#E8385A", Négociation:"#2E6FD4", Stratégie:"#6C3FC5",
   Leadership:"#C9A84C", Investissement:"#16a34a", Croissance:"#D4561A",
 };
@@ -56,7 +55,6 @@ export default function CoursePlayerPage({ params }: { params: Promise<{ id: str
   const { id } = use(params);
 
   const [userId, setUserId]         = useState<string|null>(null);
-  const [userRole, setUserRole]     = useState("Standard");
   const [course, setCourse]         = useState<Course|null>(null);
   const [modules, setModules]       = useState<Module[]>([]);
   const [progress, setProgress]     = useState<Record<string,ModuleProgress>>({});
@@ -71,7 +69,7 @@ export default function CoursePlayerPage({ params }: { params: Promise<{ id: str
     setTimeout(() => setToast(null), 2800);
   };
 
-  const loadData = useCallback(async (uid: string|null, role: string) => {
+  const loadData = useCallback(async (uid: string|null) => {
     const { data: c } = await supabase
       .from("masterclasses").select("*").eq("id", id).single();
     if (!c) { setLoading(false); return; }
@@ -112,9 +110,6 @@ export default function CoursePlayerPage({ params }: { params: Promise<{ id: str
       } catch { /* ignore */ }
     }
 
-    const locked = (TIER_ORDER[role] ?? 0) < (TIER_ORDER[c.tier_required] ?? 0);
-    if (locked) { setLoading(false); return; }
-
     setLoading(false);
   }, [id]);
 
@@ -122,15 +117,11 @@ export default function CoursePlayerPage({ params }: { params: Promise<{ id: str
     const { data:{ subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event !== "INITIAL_SESSION") return;
       let uid: string|null = null;
-      let role = "Standard";
       if (session?.user) {
         uid = session.user.id;
         setUserId(uid);
-        const { data: m } = await supabase.from("members").select("role").eq("id", uid).single();
-        role = m?.role ?? "Standard";
-        setUserRole(role);
       }
-      await loadData(uid, role);
+      await loadData(uid);
     });
     return () => subscription.unsubscribe();
   }, [loadData]);
@@ -186,33 +177,6 @@ export default function CoursePlayerPage({ params }: { params: Promise<{ id: str
           className={`flex items-center gap-2 rounded-full border border-white/15 px-5 py-2.5 text-[12px] font-semibold text-white/60 ${SP} hover:border-white/30 hover:text-white`}>
           <span className="rotate-180 inline-block"><ArrowRight width={12} height={12}/></span>
           Bibliothèque
-        </Link>
-      </div>
-    );
-  }
-
-  /* ── Locked ── */
-  const locked = (TIER_ORDER[userRole] ?? 0) < (TIER_ORDER[course.tier_required] ?? 0);
-  if (locked) {
-    return (
-      <div className="min-h-[100dvh] bg-[#0C0B09] flex flex-col items-center justify-center gap-7 p-6 text-center">
-        <div className="rounded-[1.75rem] border border-white/8 bg-white/5 p-1.5">
-          <div className="flex h-20 w-20 items-center justify-center rounded-[calc(1.75rem-0.375rem)] bg-[#C9A84C]/10">
-            <Star width={32} height={32} className="text-[#C9A84C]"/>
-          </div>
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-white" style={{ fontFamily: "var(--font-serif, Georgia, serif)" }}>
-            Accès {course.tier_required}
-          </h2>
-          <p className="mt-2 text-[13px] text-white/50 max-w-xs mx-auto">
-            Ce parcours est réservé aux membres {course.tier_required}. Mettez à niveau votre adhésion.
-          </p>
-        </div>
-        <Link href="/masterclasses"
-          className={`flex items-center gap-2 rounded-full border border-white/15 px-6 py-3 text-[12.5px] font-bold text-white ${SP} hover:bg-white/8 hover:border-white/30`}>
-          <span className="rotate-180 inline-block"><ArrowRight width={12} height={12}/></span>
-          Retour à la bibliothèque
         </Link>
       </div>
     );
