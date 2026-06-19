@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
 import { ArrowRight, Check, Eye, EyeOff } from "@/components/icons";
@@ -21,8 +20,6 @@ export default function ConnexionPage() {
 }
 
 function ConnexionContent() {
-  const router = useRouter();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -51,14 +48,10 @@ function ConnexionContent() {
   };
 
   useEffect(() => {
-    async function checkActiveSession() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) router.push("/dashboard");
-      } catch {}
-    }
-    checkActiveSession();
-  }, [router]);
+    // Déconnecte toute session existante pour repartir sur une ardoise propre.
+    // Évite le bug où l'admin restait connecté malgré une tentative de changement de compte.
+    supabase.auth.signOut().catch(() => {});
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -90,7 +83,9 @@ function ConnexionContent() {
         setIsLoading(false);
       } else if (data?.user) {
         setSuccessMessage("Connexion réussie ! Chargement de votre espace...");
-        setTimeout(() => router.push("/dashboard"), 1500);
+        // window.location.href force un rechargement complet de la page,
+        // éliminant tout état React ou session en cache de l'utilisateur précédent.
+        setTimeout(() => { window.location.href = "/dashboard"; }, 800);
       }
     } catch {
       setErrorMessage("Une erreur est survenue. Veuillez réessayer.");
