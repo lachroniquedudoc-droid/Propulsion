@@ -293,6 +293,7 @@ export default function DashboardPage() {
   const [feedMasterclass, setFeedMasterclass] = useState<FeedItem>(null);
   const [feedChallenge,   setFeedChallenge]   = useState<FeedItem>(null);
   const [feedPost,        setFeedPost]        = useState<FeedItem>(null);
+  const [installment, setInstallment] = useState<{ total_amount: number, amount_paid: number, deadline: string, status: string } | null>(null);
 
   useEffect(() => {
     try {
@@ -315,13 +316,16 @@ export default function DashboardPage() {
           { data: progressData },
           { data: submissionsData },
           { data: referralsData },
+          { data: installmentData },
         ] = await Promise.all([
           supabase.from("members").select("id,first_name,last_name,whatsapp,role,status,unique_id,referral_code,city,sector,company,bio,avatar_url,is_private,reputation_points,created_at,subscription_expires_at").eq("id", uid).single(),
           supabase.from("content_progress").select("seconds_watched").eq("member_id", uid),
           supabase.from("challenge_submissions").select("status").eq("member_id", uid),
           supabase.from("referrals").select("commission").eq("referrer_id", uid),
+          supabase.from("payment_installments").select("total_amount,amount_paid,deadline,status").eq("member_id", uid).eq("status", "En cours").limit(1).maybeSingle(),
         ]);
         if (profileData) setMember(profileData);
+        if (installmentData) setInstallment(installmentData as any);
         supabase.rpc("check_my_subscription").then(({ data }) => {
           if (data?.expires_at) setMember(p => ({ ...p, subscription_expires_at: data.expires_at }));
         });
@@ -518,6 +522,27 @@ export default function DashboardPage() {
 
           {/* Subscription countdown */}
           <SubscriptionWidget member={member} levelColor={levelColor} />
+
+          {/* Installment Tracker */}
+          {installment && (
+            <div className={`rounded-2xl border border-[#F0A500]/40 bg-[#FFF8EB] p-5 shadow-sm space-y-3`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#D97706]">Paiement en tranches</span>
+                <span className="text-[11.5px] font-bold text-[#D97706]">
+                  Reste à payer : {(installment.total_amount - installment.amount_paid).toLocaleString("fr-FR")} FCFA
+                </span>
+              </div>
+              <div className="h-[5px] w-full bg-[#F0A500]/20 rounded-full overflow-hidden">
+                <div className={`h-full bg-[#F0A500] rounded-full ${SP}`} style={{ width: `${(installment.amount_paid / installment.total_amount) * 100}%` }} />
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-[#D97706]/70">Payé : {installment.amount_paid.toLocaleString("fr-FR")} FCFA</span>
+                <span className="font-semibold" style={{ color: new Date(installment.deadline).getTime() < Date.now() ? "#E8174B" : "#D97706" }}>
+                  Date limite : {new Date(installment.deadline).toLocaleDateString("fr-FR")}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Onboarding progress */}
           <div className={`bg-white border border-[#E0DDD8]/60 rounded-2xl px-5 py-4 ${SP} hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]`}>

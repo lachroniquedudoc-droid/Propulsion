@@ -104,8 +104,18 @@ type AdminSubmission = {
   challenge: { title: string; points: number } | null;
 };
 
+type AdminInstallment = {
+  id: string; member_id: string; tier_target: string; total_amount: number;
+  amount_paid: number; deadline: string; status: string; created_at: string;
+  member: { first_name: string; last_name: string; role: string; avatar_url: string | null } | null;
+};
+
+type AdminDiscipline = {
+  id: string; member_id: string; action_type: string; reason: string; created_at: string;
+};
+
 type Tab = "overview" | "onboarding" | "members" | "content" | "annuaire" | "settings" | "analytics" | "equipe";
-type OnboardingSub = "paiements" | "marche" | "submissions" | "annuaire_add";
+type OnboardingSub = "paiements" | "tranches" | "marche" | "submissions" | "annuaire_add";
 
 type TeamMember = {
   member_id: string; first_name: string; last_name: string;
@@ -597,6 +607,8 @@ export default function AdminPage() {
 
   /* Data */
   const [payments, setPayments]       = useState<Payment[]>([]);
+  const [installments, setInstallments] = useState<AdminInstallment[]>([]);
+  const [disciplines, setDisciplines] = useState<AdminDiscipline[]>([]);
   const [members, setMembers]         = useState<Member[]>([]);
   const [masterclasses, setMasterclasses] = useState<Masterclass[]>([]);
   const [events, setEvents]           = useState<AdminEvent[]>([]);
@@ -686,6 +698,11 @@ export default function AdminPage() {
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [showCreateResource, setShowCreateResource] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const [showCreateMember, setShowCreateMember] = useState(false);
+
+  /* Form: member */
+  const [newMem, setNewMem] = useState({ firstName: "", lastName: "", email: "", whatsapp: "", role: "Standard", status: "Actif", city: "" });
+  const [createdMemResult, setCreatedMemResult] = useState<{ email: string, tempPassword: string } | null>(null);
 
   /* Form: masterclass */
   const [mc, setMc] = useState({ title: "", description: "", youtubeId: "", category: "Vente", tier: "Standard", duration: "", courseType: "Masterclass", thumbnailUrl: "", instructor: "Dr Claudel Noubissie" });
@@ -792,6 +809,14 @@ export default function AdminPage() {
       /* Challenges — taux de complétion */
       supabase.from("challenge_submissions").select("*",{count:"exact",head:true}),
       supabase.from("challenge_submissions").select("*",{count:"exact",head:true}).eq("status","Validé"),
+
+      /* Tranches */
+      supabase.from("payment_installments")
+        .select("id,member_id,tier_target,total_amount,amount_paid,deadline,status,created_at,member:members!member_id(first_name,last_name,role,avatar_url)")
+        .order("created_at",{ascending:false}),
+
+      /* Discipline */
+      supabase.from("disciplinary_actions").select("*").order("created_at",{ascending:false}),
     ]);
 
     /* Logs d'activité — séparés car non critiques */
@@ -1310,6 +1335,25 @@ export default function AdminPage() {
     setTeamMembers((teamData as unknown as TeamMember[]) ?? []);
     notify(`Commission de ${tm.first_name} marquée comme payée.`);
   }
+
+  async function updateCustomCommissions(memberId: string, std: number, pro: number, elite: number) {
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("members").update({
+        custom_commission_standard: isNaN(std) ? null : std,
+        custom_commission_pro: isNaN(pro) ? null : pro,
+        custom_commission_elite: isNaN(elite) ? null : elite
+      }).eq("id", memberId);
+      if (error) throw error;
+      notify("Commissions personnalisées enregistrées.");
+      loadAll();
+    } catch (err: any) {
+      notify("Erreur: " + err.message, false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function loadVendeurReferrals(memberId: string) {
     if (teamReferrals[memberId]) {
       setExpandedVendeur(expandedVendeur === memberId ? null : memberId);
@@ -1646,6 +1690,49 @@ export default function AdminPage() {
   }
 
   /* ── Publications ────────────────────────────────────────────────── */
+  async function handleCreateMember(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/create-member", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newMem)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur inconnue");
+      
+      setCreatedMemResult({ email: newMem.email, tempPassword: data.tempPassword });
+      notify("Membre créé avec succès !");
+      loadAll();
+    } catch (err: any) {
+      notify("Erreur: " + err.message, false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addDiscipline(memberId: string, type: string) {
+    const reason = prompt(`Raison pour la sanction: ${type}`);
+    if (!reason) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("disciplinary_actions").insert({
+        member_id: memberId,
+        action_type: type,
+        reason,
+        created_by: adminUid
+      });
+      if (error) throw error;
+      notify("Sanction appliquée.");
+      loadAll();
+    } catch (err: any) {
+      notify("Erreur: " + err.message, false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function addPost(e: React.FormEvent) {
     e.preventDefault();
     if (!newPost.content.trim() || !adminUid) { notify("Contenu requis.", false); return; }
@@ -1984,6 +2071,7 @@ export default function AdminPage() {
                 <div className="space-y-2.5">
                   {[
                     { label: "Valider paiements",    count: payments.length, action: () => { setTab("onboarding"); setOnboardSub("paiements"); },    color: "#E8174B" },
+                    { label: "Gérer tranches",       count: installments.filter(i => i.status === "En cours").length, action: () => { setTab("onboarding"); setOnboardSub("tranches"); },    color: "#F0A500" },
                     { label: "Valider devoirs",      count: pendingSubmissions.length, action: () => { setTab("onboarding"); setOnboardSub("submissions"); }, color: "#6C3FC5" },
                     { label: "Valider offres marché", count: offers.length,   action: () => { setTab("onboarding"); setOnboardSub("marche"); },       color: "#F0A500" },
                     { label: "Ajouter à l'annuaire", count: contacts.length,  action: () => { setTab("onboarding"); setOnboardSub("annuaire_add"); }, color: "#1D6B45" },
@@ -2017,6 +2105,7 @@ export default function AdminPage() {
             <SubTabs<OnboardingSub>
               tabs={[
                 { id: "paiements",    label: "Paiements",    badge: payments.length },
+                { id: "tranches",     label: "Tranches",     badge: installments.filter(i => i.status === "En cours").length },
                 { id: "submissions",  label: "Soumissions",  badge: pendingSubmissions.length },
                 { id: "marche",       label: "Marché",        badge: offers.length },
                 { id: "annuaire_add", label: "Annuaire +" },
@@ -2105,6 +2194,79 @@ export default function AdminPage() {
                             </button>
                           </div>
 
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* Tranches */}
+            {onboardSub === "tranches" && (
+              <div className="space-y-3">
+                {installments.length === 0 ? (
+                  <AdminEmptyState
+                    title="Aucun paiement en tranches"
+                    subtitle="Aucun membre n'a de paiement en tranches en cours."
+                  />
+                ) : (
+                  installments.map(inst => {
+                    const m = inst.member;
+                    const tc = TIER_COLOR[m?.role ?? "Standard"] ?? "#2E6FD4";
+                    const isLate = inst.status === "En cours" && new Date(inst.deadline).getTime() < Date.now();
+                    return (
+                      <article key={inst.id} className="rounded-2xl border border-[#E0DDD8] bg-white p-6 shadow-none flex flex-col md:flex-row items-center gap-6 justify-between">
+                        <div className="flex items-center gap-3">
+                          {m?.avatar_url ? (
+                            <img src={m.avatar_url} className="h-10 w-10 rounded-full object-cover shrink-0" alt="" />
+                          ) : (
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white font-sans" style={{ backgroundColor: tc }}>
+                              {m ? initials(m) : "?"}
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-[14px] font-semibold text-[#1A1A1A] font-sans truncate">
+                              {m ? `${m.first_name} ${m.last_name}` : "Membre supprimé"}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[11px] font-bold" style={{ color: TIER_COLOR[inst.tier_target] }}>
+                                Cible: {inst.tier_target}
+                              </span>
+                              <span className="text-[#E0DDD8]">•</span>
+                              <span className="text-[11px] text-[#6B6B6B]">
+                                Échéance: {new Date(inst.deadline).toLocaleDateString("fr-FR")}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <p className="font-serif text-[18px] font-bold text-[#1A1A1A]">
+                              {fmtAmount(inst.amount_paid)} / {fmtAmount(inst.total_amount)}
+                            </p>
+                            <p className="text-[12px] font-bold" style={{ color: inst.status === "Soldé" ? "#1D6B45" : isLate ? "#E8174B" : "#F0A500" }}>
+                              {inst.status} {isLate && "(En retard)"}
+                            </p>
+                          </div>
+
+                          {inst.status === "En cours" && (
+                            <button
+                              onClick={async () => {
+                                if (confirm("Confirmer que le reste a été payé ? Le statut passera à Soldé.")) {
+                                  try {
+                                    await supabase.from("payment_installments").update({ status: "Soldé", amount_paid: inst.total_amount }).eq("id", inst.id);
+                                    notify("Paiement soldé !");
+                                    loadAll();
+                                  } catch (err: any) { notify("Erreur : " + err.message, false); }
+                                }
+                              }}
+                              className="h-9 px-4 bg-[#1D6B45] text-white rounded-lg text-[13px] font-sans font-semibold transition-all hover:scale-[1.015] active:scale-[0.98] cursor-pointer"
+                            >
+                              Solder
+                            </button>
+                          )}
                         </div>
                       </article>
                     );
@@ -2324,9 +2486,14 @@ export default function AdminPage() {
         {/* ══ MEMBRES ═════════════════════════════════════════════════ */}
         {tab === "members" && (
           <div className="space-y-4">
-            <div>
-              <h2 className="font-serif text-[18px] font-bold text-[#1A1A1A]">Gestion des membres</h2>
-              <p className="text-[13px] text-[#6B6B6B] font-sans">{members.length} inscrits</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-serif text-[18px] font-bold text-[#1A1A1A]">Gestion des membres</h2>
+                <p className="text-[13px] text-[#6B6B6B] font-sans">{members.length} inscrits</p>
+              </div>
+              <button onClick={() => setShowCreateMember(true)} className="flex items-center gap-2 rounded-full bg-[#1A1A1A] px-4 py-2 text-[13px] font-bold text-white transition-transform hover:scale-105 active:scale-95 cursor-pointer">
+                <Plus width={16} height={16} /> Ajouter
+              </button>
             </div>
             
             <div className="space-y-3">
@@ -2442,6 +2609,35 @@ export default function AdminPage() {
                             <p className="mt-2 text-[11px] text-[#6B6B6B] font-sans">
                               {(m.badges ?? []).length} badge{(m.badges ?? []).length > 1 ? "s" : ""} attribué{(m.badges ?? []).length > 1 ? "s" : ""} · Points de réputation&nbsp;: <strong>{m.reputation_points ?? 0}</strong>
                             </p>
+                          )}
+                        </div>
+
+                        {/* Module de Discipline */}
+                        <div className="pt-3 border-t border-[#E0DDD8] mt-3">
+                          <p className="text-[11px] font-sans font-bold uppercase tracking-[0.12em] text-[#6B6B6B] mb-3">Discipline & Sanctions</p>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            <button onClick={() => addDiscipline(m.id, 'Avertissement')} disabled={saving} className="h-8 px-3 rounded-md bg-[#F0A500]/10 text-[#F0A500] text-[12px] font-bold hover:bg-[#F0A500]/20 cursor-pointer">
+                              + Avertissement
+                            </button>
+                            <button onClick={() => addDiscipline(m.id, 'Suspension temporaire')} disabled={saving} className="h-8 px-3 rounded-md bg-[#E8174B]/10 text-[#E8174B] text-[12px] font-bold hover:bg-[#E8174B]/20 cursor-pointer">
+                              + Suspendre
+                            </button>
+                            <button onClick={() => addDiscipline(m.id, 'Exclusion définitive')} disabled={saving} className="h-8 px-3 rounded-md bg-[#1A1A1A] text-white text-[12px] font-bold hover:bg-[#1A1A1A]/90 cursor-pointer">
+                              + Exclure
+                            </button>
+                          </div>
+                          {disciplines.filter(d => d.member_id === m.id).length > 0 ? (
+                            <div className="space-y-2">
+                              {disciplines.filter(d => d.member_id === m.id).map(d => (
+                                <div key={d.id} className="text-[12px] p-2 bg-[#F4F3F0] rounded-md border border-[#E0DDD8]">
+                                  <strong style={{ color: d.action_type === 'Avertissement' ? '#F0A500' : '#E8174B'}}>{d.action_type}</strong>
+                                  <span className="text-[#6B6B6B] ml-2">({new Date(d.created_at).toLocaleDateString()})</span>
+                                  <p className="mt-0.5 text-[#1A1A1A]">{d.reason}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[12px] text-[#6B6B6B]">Aucune sanction pour ce membre.</p>
                           )}
                         </div>
                       </div>
@@ -4139,6 +4335,18 @@ export default function AdminPage() {
                             <button onClick={() => loadVendeurReferrals(tm.member_id)}
                               className="h-8 px-3 bg-[#F4F3F0] text-[#1A1A1A] rounded-lg text-[12px] font-semibold hover:bg-[#E0DDD8] transition-all cursor-pointer">
                               {isExpanded ? "Masquer" : "Détails"}
+                            </button>
+                            <button onClick={() => {
+                                const std = prompt("Commission Standard personnalisée (laisser vide pour defaut):", "");
+                                if(std === null) return;
+                                const pro = prompt("Commission Pro personnalisée:", "");
+                                if(pro === null) return;
+                                const elite = prompt("Commission Élite personnalisée:", "");
+                                if(elite === null) return;
+                                updateCustomCommissions(tm.member_id, parseFloat(std), parseFloat(pro), parseFloat(elite));
+                              }}
+                              className="h-8 px-3 bg-[#F0A500]/10 text-[#F0A500] rounded-lg text-[12px] font-semibold hover:bg-[#F0A500]/20 transition-all cursor-pointer">
+                              Taux personnalisés
                             </button>
                             <button onClick={() => setConfirmDialog({ title: "Retirer de l'équipe", message: `${tm.first_name} redeviendra membre Standard. Ses commissions validées sont conservées.`, confirmText: "Retirer", cancelText: "Annuler", isDanger: true, onConfirm: () => removeVendeur(tm) })}
                               className="h-8 px-3 bg-[#F4F3F0] text-[#E8174B] rounded-lg text-[12px] font-semibold hover:bg-[#FFF0F3] transition-all cursor-pointer">

@@ -40,84 +40,38 @@ export function AiAgent() {
     return () => window.removeEventListener("toggle-ai-agent", handler);
   }, []);
 
-  // Moteur RAG Strict local - Analyse sémantique des questions
-  const getAiResponse = (query: string): Message => {
-    const q = query.toLowerCase();
-
-    // 1. Thème Tarifs & Offres
-    if (q.includes("tarif") || q.includes("prix") || q.includes("offre") || q.includes("cout") || q.includes("coût") || q.includes("standard") || q.includes("pro") || q.includes("elite") || q.includes("élite")) {
-      return {
-        sender: "ai",
-        text: "La communauté Propulsion propose trois formules d'adhésion annuelles :\n\n• **Standard** : 25 000 FCFA / an — Accès à la communauté, masterclass hebdo & replays.\n• **Pro** : 75 000 FCFA / an — Standard + annuaire complet & fiches business.\n• **Élite** : 250 000 FCFA / an — Pro + canal Élite privé, accompagnement rapproché du Dr Claudel, badge Élite & Apéro Business inclus."
-      };
-    }
-
-    // 2. Thème Paiement & Validation
-    if (q.includes("paiement") || q.includes("payer") || q.includes("valider") || q.includes("validation") || q.includes("momo") || q.includes("orange") || q.includes("capture") || q.includes("preuve")) {
-      return {
-        sender: "ai",
-        text: "Pour valider votre paiement :\n\n1. Rendez-vous sur la page d'adhésion.\n2. Sélectionnez votre pays pour afficher les coordonnées Mobile Money locales (MTN, Orange, Wave).\n3. Effectuez le transfert, puis téléversez la capture d'écran de preuve de paiement.\n\nNotre équipe administrative CNIC vérifiera et activera votre compte sous 24h. Vous recevrez une notification d'activation par SMS et WhatsApp."
-      };
-    }
-
-    // 3. Thème Parrainage & Commissions
-    if (q.includes("parrainage") || q.includes("commission") || q.includes("filleul") || q.includes("gain") || q.includes("affiliation") || q.includes("gagner")) {
-      return {
-        sender: "ai",
-        text: "Avec notre programme de parrainage (M9), vous gagnez des commissions sur chaque adhésion de filleul converti :\n\n• **10 %** sur le niveau Standard (2 500 FCFA)\n• **15 %** sur le niveau Pro (11 250 FCFA)\n• **20 %** sur le niveau Élite (50 000 FCFA)\n\nRetrouvez votre lien d'affiliation unique dans votre espace '/parrainage'. Les commissions acquises sont versées sous 24h par Mobile Money."
-      };
-    }
-
-    // 4. Thème Actions Sensibles (Garde-fous / Interdiction d'accès ou modification)
-    if (q.includes("active mon") || q.includes("peux-tu activer") || q.includes("valide mon") || q.includes("change mon") || q.includes("modifier") || q.includes("solde") || q.includes("argent")) {
-      return {
-        sender: "ai",
-        text: "En tant qu'Agent IA Propulsion, je n'ai pas l'autorisation de modifier vos informations confidentielles, de valider des transactions financières ou d'activer votre compte directement. Ces actions sensibles requièrent la validation manuelle d'un administrateur humain de l'équipe CNIC pour des raisons de sécurité. Je vous invite à contacter notre support."
-      };
-    }
-
-    // 5. Thème Qui est le Dr Claudel / CNIC
-    if (q.includes("claudel") || q.includes("dr claudel") || q.includes("noubissie") || q.includes("qui est") || q.includes("cnic")) {
-      return {
-        sender: "ai",
-        text: "Le **Dr Claudel Noubissie** est le promoteur de CNIC et le leader spirituel de la communauté **Propulsion**. Propulsion est notre maison digitale unifiée, conçue pour rassembler les entrepreneurs africains dynamiques et les guider vers la réussite à travers des masterclasses, des sprints d'exécution et du networking de haut niveau."
-      };
-    }
-
-    // 6. Thème Support Humain
-    if (q.includes("humain") || q.includes("support") || q.includes("contact") || q.includes("whatsapp") || q.includes("aide")) {
-      return {
-        sender: "ai",
-        text: "Pour discuter directement avec un membre humain de notre service d'assistance de l'équipe CNIC, cliquez sur le lien ci-dessous pour ouvrir une conversation WhatsApp officielle :",
-        isLink: true,
-        linkUrl: "https://wa.me/237677889900"
-      };
-    }
-
-    // 7. Fallback standard
-    return {
-      sender: "ai",
-      text: "Je n'ai pas trouvé d'information exacte à ce sujet dans ma base de connaissances administrative Propulsion. Souhaitez-vous discuter directement avec notre service d'assistance humaine sur WhatsApp ?",
-      isLink: true,
-      linkUrl: "https://wa.me/237677889900"
-    };
-  };
-
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
 
-    // Ajouter le message de l'utilisateur
     const newUserMessage: Message = { sender: "user", text };
-    setMessages(prev => [...prev, newUserMessage]);
+    const updatedMessages = [...messages, newUserMessage];
+    setMessages(updatedMessages);
     setInputValue("");
     setIsTyping(true);
 
-    // Simuler le temps de réflexion de l'IA (RAG local)
-    setTimeout(() => {
-      const response = getAiResponse(text);
-      setMessages(prev => [...prev, response]);
+    try {
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: updatedMessages })
+      });
+      const data = await res.json();
+      
+      const aiResponse: Message = {
+        sender: "ai",
+        text: data.reply || "Erreur de réponse",
+        isLink: data.isLink,
+        linkUrl: data.linkUrl
+      };
+      setMessages(prev => [...prev, aiResponse]);
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        sender: "ai",
+        text: "La connexion à mon cerveau IA a échoué. Veuillez réessayer."
+      }]);
+    } finally {
       setIsTyping(false);
-    }, 1000);
+    }
   };
 
   return (

@@ -25,6 +25,8 @@ type Contact = {
   whatsapp: string | null; website: string | null;
   bio: string | null; avatar_url: string | null;
   is_published: boolean;
+  whatsapp_visible: boolean;
+  email_visible: boolean;
 };
 
 const SECTORS = [
@@ -33,7 +35,7 @@ const SECTORS = [
 ] as const;
 
 const PAGE_SIZE = 24;
-const CONTACT_SELECT = "id,first_name,last_name,company,sector,city,country,phone,email,whatsapp,website,bio,avatar_url,is_published";
+const CONTACT_SELECT = "id,first_name,last_name,company,sector,city,country,phone,email,whatsapp,website,bio,avatar_url,is_published,whatsapp_visible,email_visible";
 
 function initials(c: Contact) {
   return (c.first_name[0] + (c.last_name[0] ?? "")).toUpperCase();
@@ -42,8 +44,9 @@ function initials(c: Contact) {
 /* ── WhatsApp access logic ──────────────────────────────────────── */
 type WaAccess = "full" | "request" | "locked";
 
-function getWaAccess(role: string): WaAccess {
-  if (["Admin", "Modérateur", "Élite"].includes(role)) return "full";
+function getWaAccess(role: string, targetWaVisible: boolean): WaAccess {
+  if (["Admin", "Modérateur"].includes(role)) return "full";
+  if (role === "Élite") return targetWaVisible ? "full" : "request";
   if (role === "Pro") return "request";
   return "locked";
 }
@@ -53,7 +56,7 @@ function ContactCard({ c, viewerRole, onRequestContact }: {
   c: Contact; viewerRole: string; onRequestContact: (c: Contact) => void;
 }) {
   const init    = initials(c);
-  const access  = getWaAccess(viewerRole);
+  const access  = getWaAccess(viewerRole, c.whatsapp_visible);
   const waLink  = c.whatsapp ? `https://wa.me/${c.whatsapp.replace(/\D/g, "")}` : null;
   const colors  = ["#2E6FD4","#6C3FC5","#C9A84C","#E8385A","#16a34a"];
   const seed    = (c.first_name.charCodeAt(0) ?? 0) % colors.length;
@@ -137,7 +140,7 @@ function ContactCard({ c, viewerRole, onRequestContact }: {
           )}
 
           {/* Email */}
-          {c.email && !c.website && (
+          {c.email && c.email_visible && !c.website && (
             <a href={`mailto:${c.email}`}
               className="ml-auto text-[11px] text-[#2E6FD4] font-semibold hover:underline truncate">
               ✉ Email
@@ -336,7 +339,7 @@ export default function AnnuairePage() {
   };
 
   const hasFilters = search || sectorF !== "Tous secteurs" || countryF !== "Tous pays" || cityF !== "Toutes villes";
-  const access     = getWaAccess(role);
+  const access     = getWaAccess(role, true);
 
   return (
     <MemberLayout role={role}>

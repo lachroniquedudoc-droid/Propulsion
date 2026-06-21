@@ -9,12 +9,14 @@ type ProfileForm = {
   first_name: string; last_name:  string; whatsapp:   string;
   company:    string; sector:     string; city:       string;
   bio:        string; avatar_url: string;
+  whatsapp_visible: boolean; email_visible: boolean;
 };
 
 const EMPTY: ProfileForm = {
   first_name: "", last_name:  "", whatsapp:   "",
   company:    "", sector:     "", city:       "",
   bio:        "", avatar_url: "",
+  whatsapp_visible: false, email_visible: false,
 };
 
 const SECTORS = [
@@ -58,6 +60,8 @@ export default function ProfilPage() {
             whatsapp:   data.whatsapp   ?? "", company:    data.company    ?? "",
             sector:     data.sector     ?? "", city:       data.city       ?? "",
             bio:        data.bio        ?? "", avatar_url: data.avatar_url ?? "",
+            whatsapp_visible: data.whatsapp_visible ?? false,
+            email_visible: data.email_visible ?? false,
           });
           setReadOnly({ role: data.role ?? "", status: data.status ?? "", unique_id: data.unique_id ?? "" });
         }
@@ -77,7 +81,7 @@ export default function ProfilPage() {
     return () => subscription.unsubscribe();
   }, []);
 
-  function set(key: keyof ProfileForm, value: string) {
+  function set(key: keyof ProfileForm, value: string | boolean) {
     setForm(f => ({ ...f, [key]: value }));
     setDirty(true);
     setError("");
@@ -124,6 +128,7 @@ export default function ProfilPage() {
         whatsapp: form.whatsapp.trim() || null, company: form.company.trim() || null,
         sector: form.sector || null, city: form.city.trim() || null,
         bio: form.bio.trim() || null, avatar_url: form.avatar_url || null,
+        whatsapp_visible: form.whatsapp_visible, email_visible: form.email_visible,
       }).eq("id", uid);
       if (dbErr) throw dbErr;
       setDirty(false);
@@ -322,6 +327,27 @@ export default function ProfilPage() {
                 </div>
               </section>
 
+              {/* Confidentialité */}
+              <section>
+                <h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-faint">Confidentialité dans l&apos;annuaire</h2>
+                <div className="rounded-2xl border border-[#E0DDD8] bg-white divide-y divide-[#E0DDD8]">
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-[12.5px] font-bold text-ink">Afficher mon numéro WhatsApp</p>
+                      <p className="text-[11px] text-faint max-w-sm mt-0.5">Permet aux membres Élite de vous contacter directement sans passer par l&apos;équipe.</p>
+                    </div>
+                    <Toggle checked={form.whatsapp_visible} onChange={v => set("whatsapp_visible", v)} />
+                  </div>
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-[12.5px] font-bold text-ink">Afficher mon adresse E-mail</p>
+                      <p className="text-[11px] text-faint max-w-sm mt-0.5">Rend votre email public dans l&apos;annuaire de la communauté.</p>
+                    </div>
+                    <Toggle checked={form.email_visible} onChange={v => set("email_visible", v)} />
+                  </div>
+                </div>
+              </section>
+
               <p className="text-center text-[11px] text-faint pb-4">
                 Après sauvegarde, vous serez redirigé vers votre tableau de bord.
               </p>
@@ -344,5 +370,14 @@ function Field({ label, required, children }: { label: string; required?: boolea
       </label>
       {children}
     </div>
+  );
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ${checked ? 'bg-brand' : 'bg-[#E0DDD8]'}`}>
+      <span aria-hidden="true" className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-5' : 'translate-x-0'}`}/>
+    </button>
   );
 }

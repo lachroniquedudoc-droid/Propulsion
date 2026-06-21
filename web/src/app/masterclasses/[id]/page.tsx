@@ -63,6 +63,7 @@ export default function CoursePlayerPage({ params }: { params: Promise<{ id: str
   const [autoplay, setAutoplay]     = useState(false);
   const [toast, setToast]           = useState<string|null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hasWatched, setHasWatched]   = useState(false);
 
   const notify = (msg: string) => {
     setToast(msg);
@@ -154,6 +155,7 @@ export default function CoursePlayerPage({ params }: { params: Promise<{ id: str
     setCurrentIdx(idx);
     setAutoplay(true);
     setSidebarOpen(false);
+    setHasWatched(false);
   }
 
   /* ── Loading ── */
@@ -297,11 +299,23 @@ export default function CoursePlayerPage({ params }: { params: Promise<{ id: str
                 </div>
 
                 {!isCurrentDone && userId && (
-                  <button onClick={() => handleMarkComplete(currentModule.id)}
-                    className={`shrink-0 flex items-center gap-2 rounded-full bg-[#16a34a] px-4 py-2.5 text-[12px] font-bold text-white shadow-[0_4px_16px_rgba(22,163,74,0.25)] ${SP} hover:bg-[#15803d] active:scale-[0.97]`}>
-                    <Check width={13} height={13}/>
-                    Marquer terminé
-                  </button>
+                  <div className="shrink-0 flex flex-col items-end gap-2 mt-3 sm:mt-0">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input type="checkbox" checked={hasWatched} onChange={e => setHasWatched(e.target.checked)}
+                        className="peer sr-only" />
+                      <div className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${hasWatched ? 'bg-[#16a34a] border-[#16a34a]' : 'border-white/30 group-hover:border-white/50'}`}>
+                        {hasWatched && <Check width={10} height={10} className="text-white" />}
+                      </div>
+                      <span className="text-[11.5px] font-medium text-white/70 group-hover:text-white transition-colors select-none">
+                        J&apos;ai suivi ce module en entier
+                      </span>
+                    </label>
+                    <button onClick={() => handleMarkComplete(currentModule.id)} disabled={!hasWatched}
+                      className={`flex items-center gap-2 rounded-full bg-[#16a34a] px-4 py-2.5 text-[12px] font-bold text-white shadow-[0_4px_16px_rgba(22,163,74,0.25)] ${SP} hover:bg-[#15803d] active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed`}>
+                      <Check width={13} height={13}/>
+                      Marquer terminé
+                    </button>
+                  </div>
                 )}
               </div>
 
