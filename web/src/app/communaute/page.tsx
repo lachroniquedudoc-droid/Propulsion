@@ -68,14 +68,18 @@ function initials(a: Author) {
   return `${a.first_name?.[0] ?? ""}${a.last_name?.[0] ?? ""}`.toUpperCase();
 }
 
+const GHOST_AUTHOR: Author = { first_name: "Membre", last_name: "Propulsion", role: "Standard", avatar_url: null, badges: null };
+
 function normalizePost(raw: Record<string, unknown>): PostRow {
   const p = raw as PostRow;
   return {
     ...p,
+    content:         p.content         ?? "",
+    author:          p.author          ?? GHOST_AUTHOR,
     social_likes:    p.social_likes    ?? [],
-    social_comments: [...(p.social_comments ?? [])].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    ),
+    social_comments: [...(p.social_comments ?? [])]
+      .map(c => ({ ...c, content: c.content ?? "", author: c.author ?? GHOST_AUTHOR }))
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
   };
 }
 
@@ -946,10 +950,12 @@ function PostCard({
   onDelete, onReport, alreadyReported,
 }: PostCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const author  = post.author ?? GHOST_AUTHOR;
+  const content = post.content ?? "";
   const isLiked    = !!currentUserId && post.social_likes.some(l => l.member_id === currentUserId);
   const catColor   = CAT_COLOR[post.category] ?? "#3871c2";
-  const roleColor  = ROLE_COLOR[post.author.role] ?? "#3871c2";
-  const shouldTruncate = post.content.length > 300 || post.content.split("\n").length > 4;
+  const roleColor  = ROLE_COLOR[author.role] ?? "#3871c2";
+  const shouldTruncate = content.length > 300 || content.split("\n").length > 4;
 
   return (
     <article
@@ -958,13 +964,13 @@ function PostCard({
     >
       {/* Header */}
       <div className="flex items-start gap-3 p-4 pb-3">
-        <Avatar author={post.author} size={38}/>
+        <Avatar author={author} size={38}/>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[13.5px] font-bold text-ink">{post.author.first_name} {post.author.last_name}</span>
+            <span className="text-[13.5px] font-bold text-ink">{author.first_name} {author.last_name}</span>
             <span className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-              style={{ background: `${roleColor}18`, color: roleColor }}>{post.author.role}</span>
-            <AuthorBadges badges={post.author.badges}/>
+              style={{ background: `${roleColor}18`, color: roleColor }}>{author.role}</span>
+            <AuthorBadges badges={author.badges}/>
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="text-[11px] text-faint">{relativeTime(post.created_at)}</span>
@@ -993,7 +999,7 @@ function PostCard({
       {/* Content */}
       <div className="px-4">
         <p className={`text-[14px] leading-[1.75] text-ink whitespace-pre-line ${!expanded && shouldTruncate ? "line-clamp-4" : ""}`}>
-          <RichContent text={post.content}/>
+          <RichContent text={content}/>
         </p>
         {shouldTruncate && (
           <button onClick={() => setExpanded(v => !v)} className="mt-1 text-[12px] font-semibold text-brand hover:underline">
@@ -1029,18 +1035,21 @@ function PostCard({
           {post.social_comments.length === 0 && (
             <p className="text-center text-[12px] text-faint py-2">Soyez le premier à commenter.</p>
           )}
-          {post.social_comments.map(c => (
-            <div key={c.id} className="flex gap-2.5">
-              <Avatar author={c.author} size={28}/>
-              <div className="rounded-2xl rounded-tl-sm bg-[#F4F3F0] px-3 py-2 flex-1 min-w-0">
-                <p className="text-[12px] font-bold text-ink">{c.author.first_name} {c.author.last_name}</p>
-                <p className="mt-0.5 text-[12.5px] text-muted leading-snug whitespace-pre-line">
-                  <RichContent text={c.content}/>
-                </p>
-                <p className="mt-1 text-[10px] text-faint">{relativeTime(c.created_at)}</p>
+          {post.social_comments.map(c => {
+            const ca = c.author ?? GHOST_AUTHOR;
+            return (
+              <div key={c.id} className="flex gap-2.5">
+                <Avatar author={ca} size={28}/>
+                <div className="rounded-2xl rounded-tl-sm bg-[#F4F3F0] px-3 py-2 flex-1 min-w-0">
+                  <p className="text-[12px] font-bold text-ink">{ca.first_name} {ca.last_name}</p>
+                  <p className="mt-0.5 text-[12.5px] text-muted leading-snug whitespace-pre-line">
+                    <RichContent text={c.content ?? ""}/>
+                  </p>
+                  <p className="mt-1 text-[10px] text-faint">{relativeTime(c.created_at)}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           <div className="flex gap-2 pt-1 items-end">
             <MentionInput
