@@ -26,6 +26,7 @@ type Member = {
   status: string; city: string | null; created_at: string; avatar_url: string | null;
   whatsapp: string | null; sector: string | null;
   badges: string[] | null; reputation_points: number | null;
+  fonction?: string | null;
 };
 type Masterclass = {
   id: string; title: string; description: string | null; youtube_id: string | null;
@@ -114,8 +115,23 @@ type AdminDiscipline = {
   id: string; member_id: string; action_type: string; reason: string; created_at: string;
 };
 
-type Tab = "overview" | "onboarding" | "members" | "content" | "annuaire" | "settings" | "analytics" | "equipe";
-type OnboardingSub = "paiements" | "tranches" | "marche" | "submissions" | "annuaire_add";
+type SocialReport = {
+  id: string; post_id: string; reason: string; status: string; created_at: string;
+  reporter: { first_name: string; last_name: string } | null;
+  post: { content: string; author: { first_name: string; last_name: string } | null } | null;
+};
+
+type SupportTicket = {
+  id: string; member_id: string; category: string; subject: string;
+  description: string; priority: string; status: string; created_at: string;
+  member: { first_name: string; last_name: string; avatar_url: string | null } | null;
+};
+type SupportMessage = {
+  id: string; ticket_id: string; sender_type: string; content: string; created_at: string;
+};
+
+type Tab = "overview" | "onboarding" | "members" | "content" | "annuaire" | "settings" | "analytics" | "equipe" | "support";
+type OnboardingSub = "paiements" | "tranches" | "marche" | "submissions" | "annuaire_add" | "signalements";
 
 type TeamMember = {
   member_id: string; first_name: string; last_name: string;
@@ -150,6 +166,15 @@ const STATUS_COLOR: Record<string, string> = {
 
 function fmtAmount(n: number) {
   return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M FCFA` : `${n.toLocaleString("fr-FR")} FCFA`;
+}
+
+function downloadCSV(rows: string[][], filename: string) {
+  const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = rows.map(r => r.map(esc).join(",")).join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 function initials(m: { first_name: string; last_name: string }) {
   return (m.first_name[0] + (m.last_name[0] ?? "")).toUpperCase();
@@ -609,6 +634,9 @@ export default function AdminPage() {
   const [payments, setPayments]       = useState<Payment[]>([]);
   const [installments, setInstallments] = useState<AdminInstallment[]>([]);
   const [disciplines, setDisciplines] = useState<AdminDiscipline[]>([]);
+  const [reports, setReports]         = useState<SocialReport[]>([]);
+  const [disciplineModal, setDisciplineModal] = useState<{ memberId: string; memberName: string; type: string } | null>(null);
+  const [disciplineReason, setDisciplineReason] = useState("");
   const [members, setMembers]         = useState<Member[]>([]);
   const [masterclasses, setMasterclasses] = useState<Masterclass[]>([]);
   const [events, setEvents]           = useState<AdminEvent[]>([]);
@@ -627,12 +655,31 @@ export default function AdminPage() {
   const [vendeurSearch, setVendeurSearch] = useState("");
   const [addVendeurSearch, setAddVendeurSearch] = useState("");
   const [addVendeurResults, setAddVendeurResults] = useState<Member[]>([]);
+  const [commModal, setCommModal] = useState<{ memberId: string; memberName: string } | null>(null);
+  const [commStd,   setCommStd]   = useState("");
+  const [commPro,   setCommPro]   = useState("");
+  const [commElite, setCommElite] = useState("");
+  /* ── Support ── */
+  const [tickets,       setTickets]       = useState<SupportTicket[]>([]);
+  const [ticketFilter,  setTicketFilter]  = useState<string>("Tous");
+  const [activeTicket,  setActiveTicket]  = useState<SupportTicket | null>(null);
+  const [ticketMsgs,    setTicketMsgs]    = useState<SupportMessage[]>([]);
+  const [replyText,     setReplyText]     = useState("");
+  /* ── Import membres ── */
+  const [showMemberImport,  setShowMemberImport]  = useState(false);
+  const [importMembers,     setImportMembers]      = useState<any[]>([]);
+  const [importMemberError, setImportMemberError]  = useState<string | null>(null);
+  const [importMemberProgress, setImportMemberProgress] = useState<{ done: number; total: number; errors: string[] } | null>(null);
+  const importMemberFileRef = useRef<HTMLInputElement>(null);
 
   /* ── Admin / Modérateur management ── */
   const [adminMembers,     setAdminMembers]     = useState<Member[]>([]);
   const [addAdminSearch,   setAddAdminSearch]   = useState("");
   const [addAdminResults,  setAddAdminResults]  = useState<Member[]>([]);
   const [promoteRole,      setPromoteRole]      = useState<"Admin" | "Modérateur">("Modérateur");
+  const [promoteFonction,  setPromoteFonction]  = useState<string>("");
+  const [editFonctionId,   setEditFonctionId]   = useState<string | null>(null);
+  const [editFonctionVal,  setEditFonctionVal]  = useState<string>("");
 
   const [systemSettings, setSystemSettings] = useState<{
     maintenanceMode: boolean;
@@ -819,6 +866,26 @@ export default function AdminPage() {
       supabase.from("disciplinary_actions").select("*").order("created_at",{ascending:false}),
     ]);
 
+    /* Signalements — non bloquants */
+    (async () => {
+      try {
+        const { data } = await supabase.from("social_reports")
+          .select("id,post_id,reason,status,created_at,reporter:members!reporter_id(first_name,last_name),post:social_posts!post_id(content,author:members!author_id(first_name,last_name))")
+          .eq("status","En attente").order("created_at",{ascending:false});
+        if (data) setReports(data as unknown as SocialReport[]);
+      } catch { /* non bloquant */ }
+    })();
+
+    /* Tickets support — non bloquants */
+    (async () => {
+      try {
+        const { data } = await supabase.from("support_tickets")
+          .select("id,member_id,category,subject,description,priority,status,created_at,member:members!member_id(first_name,last_name,avatar_url)")
+          .order("created_at",{ascending:false});
+        if (data) setTickets(data as unknown as SupportTicket[]);
+      } catch { /* non bloquant */ }
+    })();
+
     /* Logs d'activité — séparés car non critiques */
     const { data: logsData } = await supabase
       .from("member_activity_logs")
@@ -889,7 +956,7 @@ export default function AdminPage() {
     /* Admins & Modérateurs actuels */
     const { data: adminsData } = await supabase
       .from("members")
-      .select("id,first_name,last_name,role,avatar_url,status,city,sector,created_at,badges,reputation_points,whatsapp")
+      .select("id,first_name,last_name,role,avatar_url,status,city,sector,created_at,badges,reputation_points,whatsapp,fonction")
       .in("role", ["Admin", "Modérateur"])
       .order("role")
       .order("first_name");
@@ -1395,19 +1462,144 @@ export default function AdminPage() {
   }
 
   async function promoteToAdminRole(member: Member) {
-    await supabase.from("members").update({ role: promoteRole }).eq("id", member.id);
+    const updates: Record<string, string> = { role: promoteRole };
+    if (promoteFonction.trim()) updates.fonction = promoteFonction.trim();
+    await supabase.from("members").update(updates).eq("id", member.id);
+    const updatedMember = { ...member, role: promoteRole, fonction: promoteFonction.trim() || null };
     setMembers(m => m.map(x => x.id === member.id ? { ...x, role: promoteRole } : x));
-    setAdminMembers(prev => [...prev, { ...member, role: promoteRole }].sort((a, b) => a.role.localeCompare(b.role) || a.first_name.localeCompare(b.first_name)));
+    setAdminMembers(prev => [...prev, updatedMember].sort((a, b) => a.role.localeCompare(b.role) || a.first_name.localeCompare(b.first_name)));
     setAddAdminResults([]);
     setAddAdminSearch("");
+    setPromoteFonction("");
     notify(`${member.first_name} ${member.last_name} promu·e ${promoteRole}.`);
   }
 
   async function demoteAdminMember(member: Member, previousRole: string) {
-    await supabase.from("members").update({ role: previousRole }).eq("id", member.id);
+    await supabase.from("members").update({ role: previousRole, fonction: null }).eq("id", member.id);
     setAdminMembers(prev => prev.filter(x => x.id !== member.id));
     setMembers(m => m.map(x => x.id === member.id ? { ...x, role: previousRole } : x));
     notify(`${member.first_name} ${member.last_name} repassé·e en ${previousRole}.`);
+  }
+
+  async function saveFonction(memberId: string) {
+    const val = editFonctionVal.trim() || null;
+    await supabase.from("members").update({ fonction: val }).eq("id", memberId);
+    setAdminMembers(prev => prev.map(x => x.id === memberId ? { ...x, fonction: val } : x));
+    setEditFonctionId(null);
+    notify("Fonction mise à jour.");
+  }
+
+  /* ── Support tickets ──────────────────────────────────────────────── */
+  async function openTicket(ticket: SupportTicket) {
+    setActiveTicket(ticket);
+    setReplyText("");
+    const { data } = await supabase.from("support_messages")
+      .select("*").eq("ticket_id", ticket.id).order("created_at");
+    setTicketMsgs((data as SupportMessage[]) ?? []);
+    if (ticket.status === "Nouveau") {
+      await supabase.from("support_tickets").update({ status: "En cours" }).eq("id", ticket.id);
+      setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, status: "En cours" } : t));
+      setActiveTicket(prev => prev ? { ...prev, status: "En cours" } : prev);
+    }
+  }
+
+  async function sendSupportReply() {
+    if (!activeTicket || !replyText.trim()) return;
+    setSaving(true);
+    try {
+      const { data: msg } = await supabase.from("support_messages").insert({
+        ticket_id: activeTicket.id,
+        sender_type: "support",
+        content: replyText.trim(),
+      }).select().single();
+      if (msg) setTicketMsgs(prev => [...prev, msg as SupportMessage]);
+      setReplyText("");
+    } catch (err: unknown) { notify("Erreur : " + (err instanceof Error ? err.message : "inconnue"), false); }
+    finally { setSaving(false); }
+  }
+
+  async function closeTicket(ticketId: string) {
+    await supabase.from("support_tickets").update({ status: "Résolu" }).eq("id", ticketId);
+    setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: "Résolu" } : t));
+    if (activeTicket?.id === ticketId) setActiveTicket(prev => prev ? { ...prev, status: "Résolu" } : prev);
+    notify("Ticket marqué Résolu.");
+  }
+
+  /* ── Import membres Excel ─────────────────────────────────────────── */
+  async function handleMemberImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportMemberError(null);
+    setImportMembers([]);
+    try {
+      const XLSX = await import("xlsx");
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: "binary" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+          if (data.length <= 1) { setImportMemberError("Fichier vide ou sans en-têtes."); return; }
+          const headers = data[0].map((h: any) => String(h).trim().toLowerCase());
+          const idx = (aliases: string[]) => headers.findIndex((h: string) => aliases.includes(h));
+          const iFirst  = idx(["prénom","prenom","first_name","firstname"]);
+          const iLast   = idx(["nom","last_name","lastname"]);
+          const iEmail  = idx(["email","e-mail","courriel"]);
+          const iWa     = idx(["whatsapp","wa"]);
+          const iCity   = idx(["ville","city"]);
+          const iRole   = idx(["niveau","level","role","tier"]);
+          const iStatus = idx(["statut","status"]);
+          if (iFirst === -1 || iLast === -1) { setImportMemberError("Colonnes 'Prénom' et 'Nom' introuvables."); return; }
+          const records: any[] = [];
+          for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            if (!row || !row.length) continue;
+            const get = (j: number) => j >= 0 && j < row.length && row[j] != null ? String(row[j]).trim() : "";
+            const fn = get(iFirst); const ln = get(iLast);
+            if (!fn && !ln) continue;
+            const rawRole   = get(iRole).toLowerCase();
+            const role      = rawRole.includes("élite") || rawRole.includes("elite") ? "Élite"
+                            : rawRole.includes("pro") ? "Pro"
+                            : rawRole.includes("admin") ? "Admin"
+                            : rawRole.includes("modér") || rawRole.includes("modo") ? "Modérateur"
+                            : "Standard";
+            const rawStatus = get(iStatus).toLowerCase();
+            const status    = rawStatus.includes("actif") ? "Actif"
+                            : rawStatus.includes("suspen") ? "Suspendu"
+                            : "En attente de paiement";
+            records.push({ first_name: fn||"Membre", last_name: ln||"Propulsion",
+              email: get(iEmail)||null, whatsapp: get(iWa)||null, city: get(iCity)||null,
+              role, status });
+          }
+          setImportMembers(records);
+        } catch { setImportMemberError("Erreur de lecture du fichier."); }
+      };
+      reader.readAsBinaryString(file);
+    } catch { setImportMemberError("Impossible de charger le lecteur Excel."); }
+  }
+
+  async function runMemberImport() {
+    if (!importMembers.length) return;
+    setImportMemberProgress({ done: 0, total: importMembers.length, errors: [] });
+    const errors: string[] = [];
+    for (let i = 0; i < importMembers.length; i++) {
+      const m = importMembers[i];
+      try {
+        const res = await fetch("/api/admin/create-member", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ firstName: m.first_name, lastName: m.last_name,
+            email: m.email || `import+${Date.now()+i}@propulsion.app`,
+            whatsapp: m.whatsapp || "", city: m.city || "",
+            role: m.role, status: m.status }),
+        });
+        if (!res.ok) { const d = await res.json(); errors.push(`${m.first_name} ${m.last_name}: ${d.error||"erreur"}`); }
+      } catch { errors.push(`${m.first_name} ${m.last_name}: erreur réseau`); }
+      setImportMemberProgress({ done: i + 1, total: importMembers.length, errors });
+    }
+    notify(`Import terminé : ${importMembers.length - errors.length} succès, ${errors.length} erreur(s).`, errors.length === 0);
+    loadAll();
   }
 
   async function sendMemberEmailReminders() {
@@ -1712,22 +1904,51 @@ export default function AdminPage() {
     }
   }
 
-  async function addDiscipline(memberId: string, type: string) {
-    const reason = prompt(`Raison pour la sanction: ${type}`);
-    if (!reason) return;
+  async function addDiscipline(memberId: string, memberName: string, type: string) {
+    setDisciplineReason("");
+    setDisciplineModal({ memberId, memberName, type });
+  }
+
+  async function confirmDiscipline() {
+    if (!disciplineModal || !disciplineReason.trim()) return;
     setSaving(true);
     try {
       const { error } = await supabase.from("disciplinary_actions").insert({
-        member_id: memberId,
-        action_type: type,
-        reason,
-        created_by: adminUid
+        member_id:   disciplineModal.memberId,
+        action_type: disciplineModal.type,
+        reason:      disciplineReason.trim(),
+        created_by:  adminUid,
       });
       if (error) throw error;
+      if (disciplineModal.type === "Suspension temporaire") {
+        await supabase.from("members").update({ status: "Suspendu" }).eq("id", disciplineModal.memberId);
+        setMembers(m => m.map(x => x.id === disciplineModal.memberId ? { ...x, status: "Suspendu" } : x));
+      }
+      if (disciplineModal.type === "Exclusion définitive") {
+        await supabase.from("members").update({ status: "Suspendu" }).eq("id", disciplineModal.memberId);
+        setMembers(m => m.map(x => x.id === disciplineModal.memberId ? { ...x, status: "Suspendu" } : x));
+      }
       notify("Sanction appliquée.");
+      setDisciplineModal(null);
       loadAll();
-    } catch (err: any) {
-      notify("Erreur: " + err.message, false);
+    } catch (err: unknown) {
+      notify("Erreur: " + (err instanceof Error ? err.message : "inconnue"), false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleReport(reportId: string, action: "delete-post" | "ignore", postId?: string) {
+    setSaving(true);
+    try {
+      if (action === "delete-post" && postId) {
+        await supabase.from("social_posts").delete().eq("id", postId);
+      }
+      await supabase.from("social_reports").update({ status: action === "ignore" ? "Ignoré" : "Traité" }).eq("id", reportId);
+      setReports(r => r.filter(x => x.id !== reportId));
+      notify(action === "ignore" ? "Signalement ignoré." : "Publication supprimée.");
+    } catch (err: unknown) {
+      notify("Erreur: " + (err instanceof Error ? err.message : "inconnue"), false);
     } finally {
       setSaving(false);
     }
@@ -1804,6 +2025,7 @@ export default function AdminPage() {
     { id: "content",    label: "Contenu" },
     { id: "annuaire",   label: "Annuaire" },
     { id: "equipe",     label: "Équipe", badge: teamMembers.length || undefined },
+    { id: "support",    label: "Support", badge: tickets.filter(t => t.status !== "Résolu").length || undefined },
     { id: "analytics",  label: "Analytics" },
     { id: "settings",   label: "Paramètres" },
   ];
@@ -2109,6 +2331,7 @@ export default function AdminPage() {
                 { id: "submissions",  label: "Soumissions",  badge: pendingSubmissions.length },
                 { id: "marche",       label: "Marché",        badge: offers.length },
                 { id: "annuaire_add", label: "Annuaire +" },
+                { id: "signalements", label: "Signalements", badge: reports.length },
               ]}
               active={onboardSub} onChange={setOnboardSub}
             />
@@ -2253,15 +2476,19 @@ export default function AdminPage() {
 
                           {inst.status === "En cours" && (
                             <button
-                              onClick={async () => {
-                                if (confirm("Confirmer que le reste a été payé ? Le statut passera à Soldé.")) {
+                              onClick={() => setConfirmDialog({
+                                title: "Solder le paiement",
+                                message: `Confirmer que ${m ? `${m.first_name} ${m.last_name}` : "ce membre"} a réglé le solde restant ? Le statut passera à Soldé.`,
+                                confirmText: "Oui, solder",
+                                isDanger: false,
+                                onConfirm: async () => {
                                   try {
                                     await supabase.from("payment_installments").update({ status: "Soldé", amount_paid: inst.total_amount }).eq("id", inst.id);
                                     notify("Paiement soldé !");
                                     loadAll();
-                                  } catch (err: any) { notify("Erreur : " + err.message, false); }
-                                }
-                              }}
+                                  } catch (err: unknown) { notify("Erreur : " + (err instanceof Error ? err.message : "inconnue"), false); }
+                                },
+                              })}
                               className="h-9 px-4 bg-[#1D6B45] text-white rounded-lg text-[13px] font-sans font-semibold transition-all hover:scale-[1.015] active:scale-[0.98] cursor-pointer"
                             >
                               Solder
@@ -2480,6 +2707,76 @@ export default function AdminPage() {
                 </form>
               </div>
             )}
+
+            {/* Signalements */}
+            {onboardSub === "signalements" && (
+              <div className="space-y-3">
+                {reports.length === 0 ? (
+                  <div className="rounded-2xl border border-[#E0DDD8] bg-white p-10 text-center">
+                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#F4F3F0]">
+                      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#6B6B6B" strokeWidth="1.8">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l1.664 1.664M21 21l-1.5-1.5m-5.485-1.242L12 17.25 4.5 21V8.742m.164-4.078a2.15 2.15 0 011.743-1.342 48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185V19.5M4.664 4.664L19.5 19.5" />
+                      </svg>
+                    </div>
+                    <h3 className="font-serif text-[16px] font-bold text-[#1A1A1A]">Aucun signalement en attente</h3>
+                    <p className="mt-1 text-[13px] text-[#6B6B6B]">Tous les signalements ont été traités.</p>
+                  </div>
+                ) : (
+                  reports.map(report => (
+                    <div key={report.id} className="rounded-2xl border border-[#E0DDD8] bg-white p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#E8174B]/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[#E8174B]">
+                              {report.reason}
+                            </span>
+                            <span className="text-[12px] text-[#6B6B6B]">
+                              par <strong>{report.reporter?.first_name} {report.reporter?.last_name}</strong>
+                            </span>
+                          </div>
+                          {report.post?.content && (
+                            <div className="rounded-xl bg-[#F4F3F0] px-4 py-3 text-[13px] text-[#1A1A1A] line-clamp-3 mb-2">
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-[#6B6B6B] block mb-1">
+                                Publication de {report.post.author?.first_name} {report.post.author?.last_name}
+                              </span>
+                              {report.post.content}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-[#F0EDE8]">
+                        <button
+                          onClick={() => handleReport(report.id, "delete-post", report.post_id)}
+                          disabled={saving}
+                          className="h-8 px-3 rounded-lg bg-[#E8174B]/10 text-[#E8174B] text-[12px] font-bold hover:bg-[#E8174B]/20 cursor-pointer transition-all disabled:opacity-40"
+                        >
+                          Supprimer la publication
+                        </button>
+                        <button
+                          onClick={() => handleReport(report.id, "ignore")}
+                          disabled={saving}
+                          className="h-8 px-3 rounded-lg bg-[#F4F3F0] text-[#6B6B6B] text-[12px] font-bold hover:bg-[#E0DDD8] hover:text-[#1A1A1A] cursor-pointer transition-all disabled:opacity-40"
+                        >
+                          Ignorer
+                        </button>
+                        {report.post?.author && (
+                          <button
+                            onClick={() => {
+                              const author = members.find(m => `${m.first_name} ${m.last_name}` === `${report.post!.author!.first_name} ${report.post!.author!.last_name}`);
+                              if (author) addDiscipline(author.id, `${author.first_name} ${author.last_name}`, 'Avertissement');
+                            }}
+                            disabled={saving}
+                            className="h-8 px-3 rounded-lg bg-[#F0A500]/10 text-[#F0A500] text-[12px] font-bold hover:bg-[#F0A500]/20 cursor-pointer transition-all disabled:opacity-40"
+                          >
+                            Avertir l&apos;auteur
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -2491,9 +2788,14 @@ export default function AdminPage() {
                 <h2 className="font-serif text-[18px] font-bold text-[#1A1A1A]">Gestion des membres</h2>
                 <p className="text-[13px] text-[#6B6B6B] font-sans">{members.length} inscrits</p>
               </div>
-              <button onClick={() => setShowCreateMember(true)} className="flex items-center gap-2 rounded-full bg-[#1A1A1A] px-4 py-2 text-[13px] font-bold text-white transition-transform hover:scale-105 active:scale-95 cursor-pointer">
-                <Plus width={16} height={16} /> Ajouter
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowMemberImport(true)} className="flex items-center gap-2 rounded-full border border-[#E0DDD8] bg-white px-4 py-2 text-[13px] font-bold text-[#1A1A1A] transition-transform hover:scale-105 active:scale-95 cursor-pointer">
+                  Importer Excel
+                </button>
+                <button onClick={() => setShowCreateMember(true)} className="flex items-center gap-2 rounded-full bg-[#1A1A1A] px-4 py-2 text-[13px] font-bold text-white transition-transform hover:scale-105 active:scale-95 cursor-pointer">
+                  <Plus width={16} height={16} /> Ajouter
+                </button>
+              </div>
             </div>
             
             <div className="space-y-3">
@@ -2616,13 +2918,13 @@ export default function AdminPage() {
                         <div className="pt-3 border-t border-[#E0DDD8] mt-3">
                           <p className="text-[11px] font-sans font-bold uppercase tracking-[0.12em] text-[#6B6B6B] mb-3">Discipline & Sanctions</p>
                           <div className="flex flex-wrap gap-2 mb-3">
-                            <button onClick={() => addDiscipline(m.id, 'Avertissement')} disabled={saving} className="h-8 px-3 rounded-md bg-[#F0A500]/10 text-[#F0A500] text-[12px] font-bold hover:bg-[#F0A500]/20 cursor-pointer">
+                            <button onClick={() => addDiscipline(m.id, `${m.first_name} ${m.last_name}`, 'Avertissement')} disabled={saving} className="h-8 px-3 rounded-md bg-[#F0A500]/10 text-[#F0A500] text-[12px] font-bold hover:bg-[#F0A500]/20 cursor-pointer">
                               + Avertissement
                             </button>
-                            <button onClick={() => addDiscipline(m.id, 'Suspension temporaire')} disabled={saving} className="h-8 px-3 rounded-md bg-[#E8174B]/10 text-[#E8174B] text-[12px] font-bold hover:bg-[#E8174B]/20 cursor-pointer">
+                            <button onClick={() => addDiscipline(m.id, `${m.first_name} ${m.last_name}`, 'Suspension temporaire')} disabled={saving} className="h-8 px-3 rounded-md bg-[#E8174B]/10 text-[#E8174B] text-[12px] font-bold hover:bg-[#E8174B]/20 cursor-pointer">
                               + Suspendre
                             </button>
-                            <button onClick={() => addDiscipline(m.id, 'Exclusion définitive')} disabled={saving} className="h-8 px-3 rounded-md bg-[#1A1A1A] text-white text-[12px] font-bold hover:bg-[#1A1A1A]/90 cursor-pointer">
+                            <button onClick={() => addDiscipline(m.id, `${m.first_name} ${m.last_name}`, 'Exclusion définitive')} disabled={saving} className="h-8 px-3 rounded-md bg-[#1A1A1A] text-white text-[12px] font-bold hover:bg-[#1A1A1A]/90 cursor-pointer">
                               + Exclure
                             </button>
                           </div>
@@ -3712,20 +4014,194 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ══ SUPPORT ══════════════════════════════════════════════════ */}
+        {tab === "support" && (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
+            {/* Liste tickets */}
+            <div className="lg:col-span-2 rounded-2xl border border-[#E0DDD8] bg-white overflow-hidden">
+              <div className="px-5 py-4 border-b border-[#E0DDD8] bg-[#F4F3F0]">
+                <h2 className="font-serif text-[16px] font-bold text-[#1A1A1A]">Tickets de support</h2>
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  {["Tous","Nouveau","En cours","Résolu"].map(f => (
+                    <button key={f} onClick={() => setTicketFilter(f)}
+                      className="px-3 py-1 rounded-full text-[11px] font-bold font-sans transition-all cursor-pointer"
+                      style={{
+                        background: ticketFilter === f ? "#1A1A1A" : "#E0DDD8",
+                        color: ticketFilter === f ? "#FFFFFF" : "#6B6B6B",
+                      }}>
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="divide-y divide-[#E0DDD8]/60 max-h-[70vh] overflow-y-auto">
+                {tickets.filter(t => ticketFilter === "Tous" || t.status === ticketFilter).length === 0 ? (
+                  <p className="px-5 py-8 text-center text-[13px] text-[#6B6B6B] font-sans">Aucun ticket.</p>
+                ) : tickets.filter(t => ticketFilter === "Tous" || t.status === ticketFilter).map(t => {
+                  const isActive = activeTicket?.id === t.id;
+                  const statusColor = t.status === "Résolu" ? "#1D6B45" : t.status === "Nouveau" ? "#E8174B" : "#F0A500";
+                  return (
+                    <button key={t.id} onClick={() => openTicket(t)}
+                      className="w-full text-left px-5 py-4 transition-colors cursor-pointer hover:bg-[#F9F8F5]"
+                      style={{ background: isActive ? "#F4F3F0" : undefined }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-bold text-[#1A1A1A] font-sans truncate">{t.subject}</p>
+                          <p className="text-[11px] text-[#6B6B6B] font-sans mt-0.5 truncate">
+                            {t.member?.first_name} {t.member?.last_name} · {t.category}
+                          </p>
+                        </div>
+                        <span className="shrink-0 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold font-sans uppercase tracking-wide"
+                          style={{ background: `${statusColor}15`, color: statusColor }}>
+                          {t.status}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 mt-1.5">
+                        <span className="text-[10px] text-[#6B6B6B] font-sans">
+                          {t.priority === "Urgent" ? "🔴" : t.priority === "Moyen" ? "🟡" : "⚪"} {t.priority}
+                        </span>
+                        <span className="text-[10px] text-[#6B6B6B] font-sans">
+                          · {new Date(t.created_at).toLocaleDateString("fr-FR")}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Thread actif */}
+            <div className="lg:col-span-3 rounded-2xl border border-[#E0DDD8] bg-white overflow-hidden flex flex-col" style={{ minHeight: 500 }}>
+              {!activeTicket ? (
+                <div className="flex-1 flex items-center justify-center px-8 py-16 text-center">
+                  <div>
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#F4F3F0]">
+                      <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#6B6B6B" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                      </svg>
+                    </div>
+                    <p className="text-[14px] font-bold text-[#1A1A1A] font-sans">Sélectionnez un ticket</p>
+                    <p className="text-[12px] text-[#6B6B6B] font-sans mt-1">Cliquez sur un ticket pour voir la conversation.</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Header ticket */}
+                  <div className="px-6 py-4 border-b border-[#E0DDD8] bg-[#F4F3F0] flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-serif text-[15px] font-bold text-[#1A1A1A]">{activeTicket.subject}</h3>
+                      <p className="text-[12px] text-[#6B6B6B] font-sans mt-0.5">
+                        {activeTicket.member?.first_name} {activeTicket.member?.last_name} · {activeTicket.category} · {activeTicket.priority}
+                      </p>
+                    </div>
+                    {activeTicket.status !== "Résolu" && (
+                      <button onClick={() => closeTicket(activeTicket.id)}
+                        className="shrink-0 h-8 px-3 rounded-lg bg-[#1D6B45]/10 text-[#1D6B45] text-[11px] font-bold hover:bg-[#1D6B45]/20 cursor-pointer transition-all">
+                        Marquer Résolu
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Messages */}
+                  <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4 max-h-[45vh]">
+                    {/* Premier message = description */}
+                    <div className="flex gap-3">
+                      <div className="h-8 w-8 shrink-0 rounded-full bg-[#2E6FD4]/15 flex items-center justify-center text-[11px] font-bold text-[#2E6FD4] font-sans">
+                        {(activeTicket.member?.first_name?.[0] ?? "M") + (activeTicket.member?.last_name?.[0] ?? "")}
+                      </div>
+                      <div className="flex-1">
+                        <div className="rounded-2xl rounded-tl-sm bg-[#F4F3F0] px-4 py-3">
+                          <p className="text-[13px] text-[#1A1A1A] font-sans leading-relaxed">{activeTicket.description}</p>
+                        </div>
+                        <p className="text-[10px] text-[#6B6B6B] font-sans mt-1">
+                          {activeTicket.member?.first_name} · {new Date(activeTicket.created_at).toLocaleString("fr-FR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+                        </p>
+                      </div>
+                    </div>
+                    {ticketMsgs.map(msg => {
+                      const isSupport = msg.sender_type === "support";
+                      return (
+                        <div key={msg.id} className={`flex gap-3 ${isSupport ? "flex-row-reverse" : ""}`}>
+                          <div className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold text-white font-sans ${isSupport ? "bg-[#1A1A1A]" : "bg-[#2E6FD4]"}`}>
+                            {isSupport ? "P" : (activeTicket.member?.first_name?.[0] ?? "M")}
+                          </div>
+                          <div className={`flex-1 ${isSupport ? "items-end flex flex-col" : ""}`}>
+                            <div className={`inline-block rounded-2xl px-4 py-3 max-w-[85%] ${isSupport ? "rounded-tr-sm bg-[#1A1A1A] text-white" : "rounded-tl-sm bg-[#F4F3F0] text-[#1A1A1A]"}`}>
+                              <p className="text-[13px] font-sans leading-relaxed">{msg.content}</p>
+                            </div>
+                            <p className="text-[10px] text-[#6B6B6B] font-sans mt-1">
+                              {isSupport ? "Équipe Propulsion" : activeTicket.member?.first_name} · {new Date(msg.created_at).toLocaleString("fr-FR",{hour:"2-digit",minute:"2-digit"})}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Répondre */}
+                  {activeTicket.status !== "Résolu" ? (
+                    <div className="px-6 py-4 border-t border-[#E0DDD8]">
+                      <div className="flex gap-3 items-end">
+                        <textarea
+                          value={replyText}
+                          onChange={e => setReplyText(e.target.value)}
+                          rows={2}
+                          placeholder="Répondre au membre…"
+                          className="flex-1 rounded-xl border border-[#E0DDD8] bg-[#F9F8F5] px-4 py-3 text-[13px] font-sans outline-none focus:border-[#2E6FD4] focus:ring-1 focus:ring-[#2E6FD4] resize-none transition-all"
+                        />
+                        <button
+                          onClick={sendSupportReply}
+                          disabled={!replyText.trim() || saving}
+                          className="h-11 px-5 rounded-xl bg-[#1A1A1A] text-white text-[13px] font-bold hover:bg-[#1A1A1A]/90 active:scale-95 cursor-pointer transition-all disabled:opacity-40 shrink-0"
+                        >
+                          Envoyer
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="px-6 py-3 border-t border-[#E0DDD8] text-center">
+                      <p className="text-[12px] text-[#1D6B45] font-bold font-sans">✓ Ce ticket est résolu</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ══ ANALYTICS ════════════════════════════════════════════════ */}
         {tab === "analytics" && stats && (
           <div className="space-y-8">
 
             {/* Header */}
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
                 <h2 className="font-serif text-[22px] font-bold text-[#1A1A1A]">Analytics & Insights</h2>
                 <p className="text-[13px] text-[#6B6B6B] font-sans mt-1">Vue complète de la santé de la communauté Propulsion.</p>
               </div>
-              <span className="flex items-center gap-1.5 rounded-full bg-[#1D6B45]/10 px-3 py-1.5 text-[11px] font-bold text-[#1D6B45] font-sans">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#1D6B45] animate-pulse inline-block"/>
-                Données en direct
-              </span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={() => {
+                    const header = ["ID","Prénom","Nom","Niveau","Statut","Ville","Secteur","WhatsApp","Date inscription"];
+                    const rows = members.map(m => [
+                      m.id, m.first_name, m.last_name, m.role, m.status,
+                      m.city ?? "", m.sector ?? "", m.whatsapp ?? "",
+                      new Date(m.created_at).toLocaleDateString("fr-FR"),
+                    ]);
+                    downloadCSV([header, ...rows], `propulsion-membres-${new Date().toISOString().slice(0,10)}.csv`);
+                  }}
+                  className="flex items-center gap-2 rounded-full border border-[#E0DDD8] bg-white px-4 py-1.5 text-[12px] font-bold text-[#1A1A1A] hover:bg-[#F4F3F0] active:scale-95 cursor-pointer transition-all font-sans"
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Exporter CSV membres
+                </button>
+                <span className="flex items-center gap-1.5 rounded-full bg-[#1D6B45]/10 px-3 py-1.5 text-[11px] font-bold text-[#1D6B45] font-sans">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#1D6B45] animate-pulse inline-block"/>
+                  Données en direct
+                </span>
+              </div>
             </div>
 
             {/* Row 1 — 4 KPI cards */}
@@ -3975,6 +4451,57 @@ export default function AdminPage() {
               )}
             </div>
 
+            {/* Row 5b — Top villes */}
+            {(() => {
+              const cityCounts = members.reduce<Record<string, number>>((acc, m) => {
+                const c = (m.city ?? "").trim();
+                if (!c) return acc;
+                acc[c] = (acc[c] ?? 0) + 1;
+                return acc;
+              }, {});
+              const topCities = Object.entries(cityCounts).sort(([, a], [, b]) => b - a).slice(0, 12);
+              const maxCity = topCities[0]?.[1] ?? 1;
+              if (!topCities.length) return null;
+              return (
+                <div className="rounded-2xl border border-[#E0DDD8] bg-white p-6 shadow-none">
+                  <div className="flex items-center justify-between mb-5">
+                    <div>
+                      <h3 className="text-[14px] font-sans font-bold text-[#1A1A1A]">Top villes</h3>
+                      <p className="text-[12px] text-[#6B6B6B] mt-0.5 font-sans">Membres par ville de résidence</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        downloadCSV(
+                          [["Ville","Membres"], ...topCities.map(([c, n]) => [c, String(n)])],
+                          `propulsion-villes-${new Date().toISOString().slice(0,10)}.csv`
+                        );
+                      }}
+                      className="flex items-center gap-1.5 rounded-full border border-[#E0DDD8] px-3 py-1.5 text-[11px] font-bold text-[#6B6B6B] hover:bg-[#F4F3F0] cursor-pointer transition-all font-sans"
+                    >
+                      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      CSV
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
+                    {topCities.map(([city, count]) => {
+                      const pct = Math.round((count / maxCity) * 100);
+                      return (
+                        <div key={city} className="flex items-center gap-3">
+                          <span className="text-[12.5px] font-sans font-semibold text-[#1A1A1A] w-32 shrink-0 truncate">{city}</span>
+                          <div className="h-1.5 flex-1 bg-[#E0DDD8]/50 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-[#6C3FC5] transition-all" style={{ width: `${pct}%` }}/>
+                          </div>
+                          <span className="text-[12px] font-bold font-sans text-[#6C3FC5] w-5 text-right shrink-0">{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Row 6 — Activité récente */}
             <div className="rounded-2xl border border-[#E0DDD8] bg-white shadow-none overflow-hidden">
               <div className="flex items-center justify-between px-6 py-5 border-b border-[#E0DDD8]">
@@ -4083,25 +4610,52 @@ export default function AdminPage() {
                     const isCurrentAdmin = m.id === adminUid;
                     const roleColor = m.role === "Admin" ? "#1A1A1A" : "#E8174B";
                     return (
-                      <div key={m.id} className="flex items-center gap-4 px-6 py-4">
+                      <div key={m.id} className="flex items-start gap-4 px-6 py-4">
                         {m.avatar_url
-                          ? <img src={m.avatar_url} className="h-10 w-10 rounded-full object-cover shrink-0" alt="" />
-                          : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white font-sans"
+                          ? <img src={m.avatar_url} className="h-10 w-10 rounded-full object-cover shrink-0 mt-0.5" alt="" />
+                          : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white font-sans mt-0.5"
                               style={{ background: roleColor }}>
                               {(m.first_name[0] + m.last_name[0]).toUpperCase()}
                             </span>
                         }
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-[14px] font-bold text-[#1A1A1A] font-sans">{m.first_name} {m.last_name}</p>
                             {isCurrentAdmin && (
                               <span className="rounded-full bg-[#2E6FD4]/10 px-2 py-0.5 text-[9px] font-bold text-[#2E6FD4] font-sans uppercase tracking-wider">Vous</span>
                             )}
                           </div>
-                          <span className="inline-flex items-center gap-1.5 mt-0.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold font-sans"
-                            style={{ background: `${roleColor}12`, color: roleColor }}>
-                            {m.role === "Admin" ? "⚙ Admin" : "🛡 Modérateur"}
-                          </span>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold font-sans"
+                              style={{ background: `${roleColor}12`, color: roleColor }}>
+                              {m.role === "Admin" ? "⚙ Admin" : "🛡 Modérateur"}
+                            </span>
+                            {/* Fonction / spécialité */}
+                            {editFonctionId === m.id ? (
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={editFonctionVal}
+                                  onChange={e => setEditFonctionVal(e.target.value)}
+                                  className="h-6 rounded-md border border-[#E0DDD8] bg-white px-2 text-[11px] font-sans text-[#1A1A1A] outline-none focus:border-[#2E6FD4] cursor-pointer"
+                                >
+                                  <option value="">— Sans fonction —</option>
+                                  <option>Commercial</option>
+                                  <option>Responsable pays</option>
+                                  <option>Responsable contenu</option>
+                                  <option>Responsable support</option>
+                                </select>
+                                <button onClick={() => saveFonction(m.id)} className="h-6 px-2 rounded-md bg-[#1A1A1A] text-white text-[10px] font-bold cursor-pointer hover:bg-[#1A1A1A]/80">✓</button>
+                                <button onClick={() => setEditFonctionId(null)} className="h-6 px-2 rounded-md border border-[#E0DDD8] text-[10px] font-bold text-[#6B6B6B] cursor-pointer hover:bg-[#F4F3F0]">✕</button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setEditFonctionId(m.id); setEditFonctionVal(m.fonction ?? ""); }}
+                                className="inline-flex items-center gap-1 rounded-full border border-dashed border-[#E0DDD8] px-2.5 py-0.5 text-[10px] font-sans text-[#6B6B6B] hover:border-[#2E6FD4] hover:text-[#2E6FD4] transition-colors cursor-pointer"
+                              >
+                                {m.fonction ? m.fonction : <span className="opacity-60">+ Fonction</span>}
+                              </button>
+                            )}
+                          </div>
                         </div>
                         {/* Actions — désactiver pour soi-même */}
                         {!isCurrentAdmin && (
@@ -4175,6 +4729,20 @@ export default function AdminPage() {
                         {r === "Admin" ? "⚙ Admin" : "🛡 Modérateur"}
                       </button>
                     ))}
+                  </div>
+                  {/* Fonction assignée à la promotion */}
+                  <div className="shrink-0">
+                    <select
+                      value={promoteFonction}
+                      onChange={e => setPromoteFonction(e.target.value)}
+                      className="h-10 rounded-xl border border-[#E0DDD8] bg-white px-3 text-[12px] font-sans text-[#1A1A1A] outline-none focus:border-[#2E6FD4] cursor-pointer"
+                    >
+                      <option value="">— Fonction (optionnel) —</option>
+                      <option>Commercial</option>
+                      <option>Responsable pays</option>
+                      <option>Responsable contenu</option>
+                      <option>Responsable support</option>
+                    </select>
                   </div>
                   {/* Recherche membre */}
                   <div className="relative flex-1 min-w-[220px]">
@@ -4337,13 +4905,8 @@ export default function AdminPage() {
                               {isExpanded ? "Masquer" : "Détails"}
                             </button>
                             <button onClick={() => {
-                                const std = prompt("Commission Standard personnalisée (laisser vide pour defaut):", "");
-                                if(std === null) return;
-                                const pro = prompt("Commission Pro personnalisée:", "");
-                                if(pro === null) return;
-                                const elite = prompt("Commission Élite personnalisée:", "");
-                                if(elite === null) return;
-                                updateCustomCommissions(tm.member_id, parseFloat(std), parseFloat(pro), parseFloat(elite));
+                                setCommStd(""); setCommPro(""); setCommElite("");
+                                setCommModal({ memberId: tm.member_id, memberName: `${tm.first_name} ${tm.last_name}` });
                               }}
                               className="h-8 px-3 bg-[#F0A500]/10 text-[#F0A500] rounded-lg text-[12px] font-semibold hover:bg-[#F0A500]/20 transition-all cursor-pointer">
                               Taux personnalisés
@@ -4516,6 +5079,207 @@ export default function AdminPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Import Membres Excel */}
+      {showMemberImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[#E0DDD8] bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="px-6 pt-6 pb-4 border-b border-[#E0DDD8]">
+              <h3 className="font-serif text-[18px] font-bold text-[#1A1A1A]">Importer des membres depuis Excel</h3>
+              <p className="text-[13px] text-[#6B6B6B] mt-1">Colonnes attendues : Prénom, Nom, Email, WhatsApp, Ville, Niveau (Standard/Pro/Élite), Statut (Actif/En attente de paiement)</p>
+            </div>
+            <div className="px-6 py-5 overflow-y-auto flex-1">
+              {/* Zone upload */}
+              {!importMembers.length && !importMemberProgress && (
+                <div
+                  onClick={() => importMemberFileRef.current?.click()}
+                  className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#E0DDD8] bg-[#F9F8F5] py-10 cursor-pointer hover:border-[#2E6FD4] transition-colors">
+                  <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#6B6B6B" strokeWidth="1.5" className="mb-3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  <p className="text-[14px] font-bold text-[#1A1A1A] font-sans">Glisser un fichier Excel / CSV</p>
+                  <p className="text-[12px] text-[#6B6B6B] font-sans mt-1">ou cliquer pour sélectionner</p>
+                  <input ref={importMemberFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleMemberImportFile} />
+                </div>
+              )}
+              {importMemberError && (
+                <div className="mt-3 rounded-xl bg-[#E8174B]/10 px-4 py-3 text-[13px] text-[#E8174B] font-sans font-bold">
+                  {importMemberError}
+                </div>
+              )}
+              {/* Prévisualisation */}
+              {importMembers.length > 0 && !importMemberProgress && (
+                <div className="mt-2">
+                  <p className="text-[13px] font-bold text-[#1A1A1A] font-sans mb-3">{importMembers.length} membre{importMembers.length > 1 ? "s" : ""} détecté{importMembers.length > 1 ? "s" : ""}</p>
+                  <div className="rounded-xl border border-[#E0DDD8] overflow-hidden">
+                    <table className="w-full text-[12px] font-sans">
+                      <thead><tr className="bg-[#F4F3F0]">
+                        {["Prénom","Nom","Email","Niveau","Statut"].map(h => (
+                          <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">{h}</th>
+                        ))}
+                      </tr></thead>
+                      <tbody className="divide-y divide-[#E0DDD8]/60">
+                        {importMembers.slice(0,8).map((m, i) => (
+                          <tr key={i}>
+                            <td className="px-3 py-2 text-[#1A1A1A]">{m.first_name}</td>
+                            <td className="px-3 py-2 text-[#1A1A1A]">{m.last_name}</td>
+                            <td className="px-3 py-2 text-[#6B6B6B] truncate max-w-[140px]">{m.email || "—"}</td>
+                            <td className="px-3 py-2 font-bold" style={{ color: TIER_COLOR[m.role] ?? "#6B6B6B" }}>{m.role}</td>
+                            <td className="px-3 py-2 text-[#6B6B6B]">{m.status}</td>
+                          </tr>
+                        ))}
+                        {importMembers.length > 8 && (
+                          <tr><td colSpan={5} className="px-3 py-2 text-center text-[#6B6B6B]">… et {importMembers.length - 8} autre(s)</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {/* Progression */}
+              {importMemberProgress && (
+                <div className="mt-2 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[14px] font-bold text-[#1A1A1A] font-sans">
+                      Import en cours… {importMemberProgress.done}/{importMemberProgress.total}
+                    </p>
+                    <span className="text-[13px] font-bold text-[#1D6B45] font-sans">
+                      {Math.round((importMemberProgress.done / importMemberProgress.total) * 100)}%
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-[#E0DDD8] overflow-hidden">
+                    <div className="h-2 rounded-full bg-[#1D6B45] transition-all duration-300"
+                      style={{ width: `${(importMemberProgress.done / importMemberProgress.total) * 100}%` }} />
+                  </div>
+                  {importMemberProgress.errors.length > 0 && (
+                    <div className="rounded-xl bg-[#F0A500]/10 px-4 py-3 space-y-1">
+                      {importMemberProgress.errors.map((e, i) => (
+                        <p key={i} className="text-[12px] text-[#F0A500] font-sans">{e}</p>
+                      ))}
+                    </div>
+                  )}
+                  {importMemberProgress.done === importMemberProgress.total && (
+                    <p className="text-[13px] font-bold text-[#1D6B45] font-sans text-center">Import terminé !</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="px-6 pb-6 pt-4 border-t border-[#E0DDD8] flex justify-end gap-3">
+              <button onClick={() => { setShowMemberImport(false); setImportMembers([]); setImportMemberProgress(null); setImportMemberError(null); }}
+                className="rounded-full border border-[#E0DDD8] bg-white px-5 py-2 text-[13px] font-bold text-[#6B6B6B] hover:bg-[#F4F3F0] active:scale-95 cursor-pointer transition-all">
+                Fermer
+              </button>
+              {importMembers.length > 0 && !importMemberProgress && (
+                <>
+                  <button onClick={() => { setImportMembers([]); setImportMemberError(null); if(importMemberFileRef.current) importMemberFileRef.current.value=""; }}
+                    className="rounded-full border border-[#E0DDD8] bg-white px-5 py-2 text-[13px] font-bold text-[#6B6B6B] hover:bg-[#F4F3F0] active:scale-95 cursor-pointer transition-all">
+                    Changer de fichier
+                  </button>
+                  <button onClick={runMemberImport} disabled={saving}
+                    className="rounded-full bg-[#1A1A1A] px-5 py-2 text-[13px] font-bold text-white hover:bg-[#1A1A1A]/90 active:scale-95 cursor-pointer transition-all disabled:opacity-40">
+                    Importer {importMembers.length} membre{importMembers.length > 1 ? "s" : ""}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Taux Commission Personnalisés */}
+      {commModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-[#E0DDD8] bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="mb-4">
+              <h3 className="font-serif text-[17px] font-bold text-[#1A1A1A]">Taux personnalisés</h3>
+              <p className="text-[13px] text-[#6B6B6B] mt-0.5">Pour <strong>{commModal.memberName}</strong>. Laisser vide = taux par défaut.</p>
+            </div>
+            <div className="space-y-3">
+              {[
+                { label: "Commission Standard (FCFA)", val: commStd, set: setCommStd, color: "#2E6FD4" },
+                { label: "Commission Pro (FCFA)",      val: commPro, set: setCommPro, color: "#6C3FC5" },
+                { label: "Commission Élite (FCFA)",    val: commElite, set: setCommElite, color: "#C9A84C" },
+              ].map(({ label, val, set, color }) => (
+                <div key={label}>
+                  <label className="block text-[11px] font-bold uppercase tracking-[0.1em] mb-1" style={{ color }}>{label}</label>
+                  <input
+                    type="number" min="0" value={val} onChange={e => set(e.target.value)}
+                    placeholder="Taux par défaut"
+                    className="w-full rounded-xl border border-[#E0DDD8] bg-[#F9F8F5] px-4 py-2.5 text-[13px] outline-none focus:border-[#2E6FD4] focus:ring-1 focus:ring-[#2E6FD4] transition-all"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button onClick={() => setCommModal(null)} className="rounded-full border border-[#E0DDD8] bg-white px-5 py-2 text-[13px] font-bold text-[#6B6B6B] hover:bg-[#F4F3F0] active:scale-95 cursor-pointer transition-all">
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  updateCustomCommissions(commModal.memberId, parseFloat(commStd), parseFloat(commPro), parseFloat(commElite));
+                  setCommModal(null);
+                }}
+                disabled={saving}
+                className="rounded-full bg-[#F0A500] px-5 py-2 text-[13px] font-bold text-white hover:bg-[#F0A500]/90 active:scale-95 cursor-pointer transition-all disabled:opacity-40"
+              >
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Discipline */}
+      {disciplineModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[#E0DDD8] bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-4 mb-4">
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                disciplineModal.type === 'Avertissement' ? 'bg-[#F0A500]/10 text-[#F0A500]'
+                : disciplineModal.type === 'Suspension temporaire' ? 'bg-[#E8174B]/10 text-[#E8174B]'
+                : 'bg-[#1A1A1A]/10 text-[#1A1A1A]'
+              }`}>
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="font-serif text-lg font-bold text-[#1A1A1A]">{disciplineModal.type}</h3>
+                <p className="text-[13px] text-[#6B6B6B] mt-0.5">Membre : <strong>{disciplineModal.memberName}</strong></p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[12px] font-bold uppercase tracking-[0.1em] text-[#6B6B6B] mb-2">Motif de la sanction *</label>
+              <textarea
+                value={disciplineReason}
+                onChange={e => setDisciplineReason(e.target.value)}
+                rows={3}
+                placeholder="Décrivez la raison de cette sanction..."
+                className="w-full rounded-xl border border-[#E0DDD8] bg-[#F9F8F5] px-4 py-3 text-[13px] text-[#1A1A1A] placeholder:text-[#BDBAB5] outline-none focus:border-[#2E6FD4] focus:ring-1 focus:ring-[#2E6FD4] resize-none transition-all"
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => setDisciplineModal(null)}
+                className="rounded-full border border-[#E0DDD8] bg-white px-5 py-2 text-[13px] font-bold text-[#6B6B6B] hover:bg-[#F4F3F0] hover:text-[#1A1A1A] active:scale-95 cursor-pointer transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmDiscipline}
+                disabled={!disciplineReason.trim() || saving}
+                className={`rounded-full px-5 py-2 text-[13px] font-bold text-white active:scale-95 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                  disciplineModal.type === 'Avertissement' ? 'bg-[#F0A500] hover:bg-[#F0A500]/90'
+                  : disciplineModal.type === 'Suspension temporaire' ? 'bg-[#E8174B] hover:bg-[#E8174B]/90'
+                  : 'bg-[#1A1A1A] hover:bg-[#1A1A1A]/90'
+                }`}
+              >
+                {saving ? "En cours…" : "Appliquer la sanction"}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -484,6 +484,32 @@ export default function CommunautePage() {
     });
   }
 
+  const [reportTarget, setReportTarget]   = useState<PostRow | null>(null);
+  const [reportReason, setReportReason]   = useState("");
+  const [reportSending, setReportSending] = useState(false);
+  const [reportedIds, setReportedIds]     = useState<Set<string>>(new Set());
+
+  async function submitReport() {
+    if (!currentUser || !reportTarget || !reportReason) return;
+    setReportSending(true);
+    try {
+      await supabase.from("social_reports").insert({
+        post_id:     reportTarget.id,
+        reporter_id: currentUser.id,
+        reason:      reportReason,
+      });
+      setReportedIds(prev => new Set([...prev, reportTarget.id]));
+      setReportTarget(null);
+      setReportReason("");
+      setNotification({ type: "success", title: "Signalement envoyé", message: "L'équipe de modération examinera cette publication." });
+    } catch {
+      setNotification({ type: "error", title: "Déjà signalé", message: "Vous avez déjà signalé cette publication." });
+      setReportTarget(null);
+    } finally {
+      setReportSending(false);
+    }
+  }
+
   async function deletePost(postId: string) {
     setConfirmDialog({
       title: "Supprimer la publication",
@@ -656,6 +682,8 @@ export default function CommunautePage() {
                         onCommentChange={v => setCommentInputs(prev => ({ ...prev, [post.id]: v }))}
                         onComment={() => submitComment(post.id)}
                         onDelete={(currentUser?.id === post.author_id || role === "Admin" || role === "Modérateur") ? () => deletePost(post.id) : undefined}
+                        onReport={currentUser && currentUser.id !== post.author_id ? () => setReportTarget(post) : undefined}
+                        alreadyReported={reportedIds.has(post.id)}
                       />
                     ))
                   )}
@@ -740,6 +768,55 @@ export default function CommunautePage() {
         </div>
       </div>
       <AiAgent/>
+
+      {/* ── Report modal ─────────────────────────────────────────────── */}
+      {reportTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => { setReportTarget(null); setReportReason(""); }}>
+          <div className="w-full max-w-sm bg-white rounded-2xl border border-[#E0DDD8] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="relative px-5 pt-5 pb-4 border-b border-[#E0DDD8]">
+              <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#F0A500]"/>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-serif text-[16px] font-bold text-[#1A1A1A]">Signaler cette publication</h3>
+                  <p className="text-[11px] text-[#6B6B6B] mt-0.5">L&apos;équipe de modération sera notifiée.</p>
+                </div>
+                <button onClick={() => { setReportTarget(null); setReportReason(""); }}
+                  className="h-7 w-7 rounded-full border border-[#E0DDD8] flex items-center justify-center text-[#6B6B6B] hover:text-[#1A1A1A] cursor-pointer">
+                  <Close width={13} height={13}/>
+                </button>
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6B6B6B]">Raison du signalement</p>
+              <div className="space-y-2">
+                {["Contenu inapproprié", "Spam ou publicité", "Harcèlement", "Désinformation", "Autre"].map(r => (
+                  <button key={r} onClick={() => setReportReason(r)}
+                    className={`w-full flex items-center gap-3 rounded-xl border px-4 py-2.5 text-left text-[13px] font-medium transition-colors cursor-pointer ${
+                      reportReason === r
+                        ? "border-[#F0A500] bg-[#F0A500]/8 text-[#1A1A1A] font-bold"
+                        : "border-[#E0DDD8] text-[#6B6B6B] hover:border-[#F0A500]/40 hover:text-[#1A1A1A]"
+                    }`}>
+                    <span className={`h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center ${reportReason === r ? "border-[#F0A500]" : "border-[#C0BDB8]"}`}>
+                      {reportReason === r && <span className="h-2 w-2 rounded-full bg-[#F0A500]"/>}
+                    </span>
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => { setReportTarget(null); setReportReason(""); }}
+                  className="flex-1 h-10 rounded-full border border-[#E0DDD8] text-[13px] font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] transition-colors cursor-pointer">
+                  Annuler
+                </button>
+                <button onClick={submitReport} disabled={!reportReason || reportSending}
+                  className="flex-1 h-10 rounded-full bg-[#F0A500] text-white text-[13px] font-bold disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer">
+                  {reportSending ? "Envoi…" : "Signaler"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Custom Notification Modal */}
       {notification && (
@@ -837,6 +914,14 @@ export default function CommunautePage() {
   );
 }
 
+function FlagIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+    </svg>
+  );
+}
+
 /* ─── PostCard ────────────────────────────────────────────────────────────── */
 
 interface PostCardProps {
@@ -851,11 +936,14 @@ interface PostCardProps {
   onCommentChange:  (v: string) => void;
   onComment:        () => void;
   onDelete?:        () => void;
+  onReport?:        () => void;
+  alreadyReported?: boolean;
 }
 
 function PostCard({
   post, currentUserId, members, commentInput, isCommentsOpen,
-  isSendingComment, onLike, onToggleComments, onCommentChange, onComment, onDelete,
+  isSendingComment, onLike, onToggleComments, onCommentChange, onComment,
+  onDelete, onReport, alreadyReported,
 }: PostCardProps) {
   const [expanded, setExpanded] = useState(false);
   const isLiked    = !!currentUserId && post.social_likes.some(l => l.member_id === currentUserId);
@@ -885,12 +973,21 @@ function PostCard({
             <span className="text-[11px] text-faint">{post.category}</span>
           </div>
         </div>
-        {onDelete && (
-          <button onClick={onDelete} title="Supprimer la publication"
-            className="text-faint hover:text-[#ff1e58] transition-colors p-1.5 rounded-full hover:bg-[#ff1e58]/5 shrink-0 cursor-pointer">
-            <Trash width={14} height={14}/>
-          </button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {onReport && !onDelete && (
+            <button onClick={onReport} disabled={alreadyReported}
+              title={alreadyReported ? "Déjà signalé" : "Signaler cette publication"}
+              className={`p-1.5 rounded-full transition-colors cursor-pointer ${alreadyReported ? "text-[#F0A500] cursor-not-allowed" : "text-faint hover:text-[#F0A500] hover:bg-[#F0A500]/5"}`}>
+              <FlagIcon />
+            </button>
+          )}
+          {onDelete && (
+            <button onClick={onDelete} title="Supprimer la publication"
+              className="text-faint hover:text-[#ff1e58] transition-colors p-1.5 rounded-full hover:bg-[#ff1e58]/5 cursor-pointer">
+              <Trash width={14} height={14}/>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content */}

@@ -140,7 +140,9 @@ export default function MasterclassesPage() {
   const [userId, setUserId]       = useState<string|null>(null);
   const [classes, setClasses]     = useState<Masterclass[]>([]);
   const [loading, setLoading]     = useState(true);
-  const [catFilter, setCatFilter] = useState<CatFilter>("Toutes");
+  const [catFilter, setCatFilter]     = useState<CatFilter>("Toutes");
+  const [tierFilter, setTierFilter]   = useState("Tous");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const { data:{ subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -179,7 +181,15 @@ export default function MasterclassesPage() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const filtered  = catFilter === "Toutes" ? classes : classes.filter(c => c.category === catFilter);
+  const filtered = classes.filter(c => {
+    if (catFilter !== "Toutes" && c.category !== catFilter) return false;
+    if (tierFilter !== "Tous" && c.tier_required !== tierFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      if (!c.title.toLowerCase().includes(q) && !(c.description ?? "").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
   const completed = classes.filter(c => c.progress?.completed).length;
 
   return (
@@ -237,6 +247,41 @@ export default function MasterclassesPage() {
             </div>
           )}
 
+          {/* Search + niveau */}
+          <div className="mb-5 flex flex-col sm:flex-row gap-3">
+            {/* Recherche */}
+            <div className="relative flex-1">
+              <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8A857E]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Rechercher une masterclass…"
+                className={`w-full rounded-full border border-[#E0DDD8] bg-white pl-9 pr-4 py-2.5 text-[13px] text-[#15130E] placeholder:text-[#8A857E] outline-none focus:border-[#2E6FD4] focus:ring-1 focus:ring-[#2E6FD4] ${SP}`}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8A857E] hover:text-[#15130E] cursor-pointer">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                </button>
+              )}
+            </div>
+            {/* Filtre niveau */}
+            <div className="flex gap-2 shrink-0">
+              {["Tous","Standard","Pro","Élite"].map(t => (
+                <button key={t} onClick={() => setTierFilter(t)}
+                  className={`shrink-0 px-3.5 py-2 rounded-full text-[12px] font-semibold border ${SP} ${
+                    t === tierFilter
+                      ? "bg-[#15130E] text-[#F4F3F0] border-[#15130E]"
+                      : "bg-white text-[#6B6560] border-[#E0DDD8] hover:border-[#C8C5BF]"
+                  }`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Category filters */}
           <div className="mb-7 flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden">
             {CAT_FILTERS.map(cat => (
@@ -262,8 +307,13 @@ export default function MasterclassesPage() {
           {!loading && (
             <>
               {filtered.length === 0 ? (
-                <div className="py-20 text-center">
-                  <p className="text-[13px] text-[#8A857E]">Aucune masterclass dans cette catégorie.</p>
+                <div className="py-20 text-center space-y-2">
+                  <p className="text-[15px] font-bold text-[#15130E]">Aucun résultat</p>
+                  <p className="text-[13px] text-[#8A857E]">Essayez d&apos;autres filtres ou effacez la recherche.</p>
+                  <button onClick={() => { setCatFilter("Toutes"); setTierFilter("Tous"); setSearchQuery(""); }}
+                    className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#E0DDD8] bg-white px-4 py-2 text-[12px] font-semibold text-[#15130E] hover:bg-[#F4F3F0] cursor-pointer transition-all">
+                    Réinitialiser les filtres
+                  </button>
                 </div>
               ) : (
                 <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

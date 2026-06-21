@@ -7,7 +7,7 @@ import { supabase } from "@/utils/supabase/client";
 import {
   Home, MessageSquare, Ticket, Briefcase,
   VideoPlay, BookUser, Trophy, Share, HelpCircle, Menu, Close, Spark,
-  BookOpen, UserCircle,
+  BookOpen, UserCircle, Users,
 } from "./icons";
 import { NotificationsBell } from "./notifications-bell";
 
@@ -53,12 +53,13 @@ const NAV_GROUP_2 = [
   { href: "/offres",        label: "Marché",        Icon: Briefcase },
   { href: "/parrainage",    label: "Parrainage",    Icon: Share },
   { href: "/ressources",    label: "Ressources",    Icon: BookOpen },
+  { href: "/equipe",        label: "Notre équipe",  Icon: Users },
 ];
 const MOBILE_NAV_ITEMS = NAV_GROUP_1;
 const MOBILE_MORE_ITEMS = [
   ...NAV_GROUP_2,
-  { href: "/profil",  label: "Mon profil", Icon: UserCircle },
-  { href: "/support", label: "Support",    Icon: HelpCircle },
+  { href: "/profil",  label: "Mon profil",  Icon: UserCircle },
+  { href: "/support", label: "Support",     Icon: HelpCircle },
 ];
 
 /* ─── Sidebar nav item ──────────────────────────────────────────── */
