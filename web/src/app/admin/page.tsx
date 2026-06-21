@@ -4399,6 +4399,127 @@ export default function AdminPage() {
 
       </main>
 
+      {/* ── Create Member Modal ─────────────────────────────────────── */}
+      {showCreateMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => { setShowCreateMember(false); setCreatedMemResult(null); }}>
+          <div className="w-full max-w-lg bg-white rounded-2xl border border-[#E0DDD8] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="relative px-6 pt-6 pb-4 border-b border-[#E0DDD8]">
+              <div className="absolute top-0 left-0 right-0 h-[3px] flex">
+                {["#F0A500","#6C3FC5","#1A1A1A","#2E6FD4","#E8174B"].map(c => <div key={c} className="flex-1" style={{ background: c }}/>)}
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-serif text-[18px] font-bold text-[#1A1A1A]">Inscrire un membre</h3>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5 font-sans">Création assistée depuis le back-office</p>
+                </div>
+                <button onClick={() => { setShowCreateMember(false); setCreatedMemResult(null); }}
+                  className="h-8 w-8 rounded-full border border-[#E0DDD8] flex items-center justify-center text-[#6B6B6B] hover:text-[#1A1A1A] hover:border-[#1A1A1A]/30 transition-colors cursor-pointer">
+                  <Close width={14} height={14}/>
+                </button>
+              </div>
+            </div>
+
+            {/* Success state */}
+            {createdMemResult ? (
+              <div className="p-6 space-y-4">
+                <div className="flex flex-col items-center gap-3 py-2">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1D6B45]/10 text-[#1D6B45]">
+                    <Check width={24} height={24}/>
+                  </span>
+                  <h4 className="font-serif text-[17px] font-bold text-[#1A1A1A]">Membre créé avec succès</h4>
+                  <p className="text-[12.5px] text-[#6B6B6B] text-center font-sans">Transmettez ces identifiants au nouveau membre. Le mot de passe temporaire expire à la première connexion.</p>
+                </div>
+                <div className="rounded-2xl border border-[#E0DDD8] bg-[#F4F3F0] divide-y divide-[#E0DDD8]">
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B6B6B] font-sans">Email</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-semibold text-[#1A1A1A] font-mono">{createdMemResult.email}</span>
+                      <button onClick={() => navigator.clipboard?.writeText(createdMemResult!.email)}
+                        className="text-[11px] text-[#2E6FD4] font-bold cursor-pointer hover:underline">Copier</button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B6B6B] font-sans">Mot de passe temp.</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-semibold text-[#1A1A1A] font-mono">{createdMemResult.tempPassword}</span>
+                      <button onClick={() => navigator.clipboard?.writeText(createdMemResult!.tempPassword)}
+                        className="text-[11px] text-[#2E6FD4] font-bold cursor-pointer hover:underline">Copier</button>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => { setShowCreateMember(false); setCreatedMemResult(null); setNewMem({ firstName: "", lastName: "", email: "", whatsapp: "", role: "Standard", status: "Actif", city: "" }); }}
+                  className="w-full h-11 rounded-full bg-[#1A1A1A] text-white font-bold text-[13px] cursor-pointer hover:opacity-90 transition-opacity">
+                  Fermer
+                </button>
+              </div>
+            ) : (
+              /* Form */
+              <form onSubmit={handleCreateMember} className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B6B6B] mb-1.5 font-sans">Prénom *</label>
+                    <input required value={newMem.firstName} onChange={e => setNewMem(p => ({ ...p, firstName: e.target.value }))}
+                      placeholder="Jean" className="w-full h-10 rounded-xl border border-[#E0DDD8] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none focus:border-[#2E6FD4] font-sans"/>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B6B6B] mb-1.5 font-sans">Nom *</label>
+                    <input required value={newMem.lastName} onChange={e => setNewMem(p => ({ ...p, lastName: e.target.value }))}
+                      placeholder="Dupont" className="w-full h-10 rounded-xl border border-[#E0DDD8] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none focus:border-[#2E6FD4] font-sans"/>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B6B6B] mb-1.5 font-sans">Email *</label>
+                  <input required type="email" value={newMem.email} onChange={e => setNewMem(p => ({ ...p, email: e.target.value }))}
+                    placeholder="jean@exemple.com" className="w-full h-10 rounded-xl border border-[#E0DDD8] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none focus:border-[#2E6FD4] font-sans"/>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B6B6B] mb-1.5 font-sans">WhatsApp</label>
+                    <input value={newMem.whatsapp} onChange={e => setNewMem(p => ({ ...p, whatsapp: e.target.value }))}
+                      placeholder="+237 6XX XXX XXX" className="w-full h-10 rounded-xl border border-[#E0DDD8] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none focus:border-[#2E6FD4] font-sans"/>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B6B6B] mb-1.5 font-sans">Ville</label>
+                    <input value={newMem.city} onChange={e => setNewMem(p => ({ ...p, city: e.target.value }))}
+                      placeholder="Douala" className="w-full h-10 rounded-xl border border-[#E0DDD8] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none focus:border-[#2E6FD4] font-sans"/>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B6B6B] mb-1.5 font-sans">Niveau</label>
+                    <select value={newMem.role} onChange={e => setNewMem(p => ({ ...p, role: e.target.value }))}
+                      className="w-full h-10 rounded-xl border border-[#E0DDD8] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none focus:border-[#2E6FD4] font-sans">
+                      {["Standard","Pro","Élite"].map(r => <option key={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B6B6B] mb-1.5 font-sans">Statut initial</label>
+                    <select value={newMem.status} onChange={e => setNewMem(p => ({ ...p, status: e.target.value }))}
+                      className="w-full h-10 rounded-xl border border-[#E0DDD8] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none focus:border-[#2E6FD4] font-sans">
+                      {["Actif","En attente de paiement"].map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <p className="text-[11px] text-[#8A857E] font-sans bg-[#F4F3F0] rounded-xl px-3 py-2.5">
+                  Un mot de passe temporaire sera généré. Vous pourrez le copier et le transmettre au membre après création.
+                </p>
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={() => setShowCreateMember(false)}
+                    className="flex-1 h-11 rounded-full border border-[#E0DDD8] text-[13px] font-bold text-[#6B6B6B] hover:text-[#1A1A1A] hover:border-[#C0BDB8] transition-colors cursor-pointer font-sans">
+                    Annuler
+                  </button>
+                  <button type="submit" disabled={saving}
+                    className="flex-1 h-11 rounded-full bg-[#1A1A1A] text-white text-[13px] font-bold disabled:opacity-50 hover:opacity-90 transition-opacity cursor-pointer font-sans">
+                    {saving ? "Création…" : "Créer le membre"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Custom Confirmation Modal */}
       {confirmDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm transition-all duration-300">
