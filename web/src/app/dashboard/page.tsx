@@ -125,6 +125,70 @@ function KpiPill({ label, display, suffix, pct, Icon, color }: {
   );
 }
 
+/* ─── Subscription countdown widget ────────────────────────────── */
+function SubscriptionWidget({ member, levelColor }: { member: MemberData; levelColor: string }) {
+  if (member.role === "Admin" || member.role === "Modérateur") return null;
+  if (member.status === "En attente de paiement" || member.status === "Paiement à valider") return null;
+
+  const expiryDate = member.subscription_expires_at
+    ? new Date(member.subscription_expires_at)
+    : member.created_at
+      ? new Date(new Date(member.created_at).setFullYear(new Date(member.created_at).getFullYear() + 1))
+      : null;
+  if (!expiryDate) return null;
+
+  const startDate  = member.created_at
+    ? new Date(member.created_at)
+    : new Date(expiryDate.getTime() - 365 * 86_400_000);
+  const daysLeft   = Math.ceil((expiryDate.getTime() - Date.now()) / 86_400_000);
+  const isExpired  = daysLeft <= 0;
+  const isUrgent   = !isExpired && daysLeft <= 30;
+  const isWarning  = !isExpired && !isUrgent && daysLeft <= 60;
+  const totalDays  = Math.max(1, Math.ceil((expiryDate.getTime() - startDate.getTime()) / 86_400_000));
+  const elapsed    = totalDays - Math.max(0, daysLeft);
+  const pct        = Math.min(100, Math.round((elapsed / totalDays) * 100));
+  const accent     = isExpired || isUrgent ? "#E8174B" : isWarning ? "#F0A500" : "#16a34a";
+
+  return (
+    <div className={`rounded-2xl border bg-white overflow-hidden ${SP} ${
+      isExpired || isUrgent ? "border-[#E8174B]/30 shadow-[0_0_0_1px_rgba(232,23,75,0.08)]"
+      : isWarning ? "border-[#F0A500]/30"
+      : "border-[#E0DDD8]/60"
+    }`}>
+      <div className="h-[3px] w-full" style={{ background: accent }} />
+      <div className="px-4 py-3.5">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6B6B6B]">Abonnement annuel</span>
+          <span className="rounded-full px-2.5 py-0.5 text-[9px] font-bold"
+            style={{ background: `${accent}14`, color: accent }}>
+            {isExpired ? "Expiré" : `${daysLeft}j restants`}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-[10.5px] text-[#8A8880] mb-2">
+          <span>Adhésion {startDate.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</span>
+          <span>Expire {expiryDate.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</span>
+        </div>
+        <div className="h-[4px] w-full rounded-full bg-[#F4F3F0] overflow-hidden">
+          <div className={`h-full rounded-full ${SP}`} style={{ width: `${pct}%`, background: accent }} />
+        </div>
+        {(isExpired || isUrgent) && (
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-[11px]" style={{ color: accent }}>
+              {isExpired ? "Votre accès a expiré." : `Renouvellement dans ${daysLeft} jour${daysLeft > 1 ? "s" : ""}.`}
+            </p>
+            <Link href="/rejoindre"
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold text-white ${SP} hover:opacity-90 active:scale-95`}
+              style={{ background: accent }}>
+              Renouveler
+              <ArrowRight width={10} height={10} />
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Feed item card ────────────────────────────────────────────── */
 function FeedCard({ category, title, sub, href, accentColor, actionLabel, levelColor }: {
   category: string; title: string; sub: string; href: string;
@@ -451,6 +515,9 @@ export default function DashboardPage() {
               return <KpiPill key={k.label} label={k.label} display={k.display} suffix={k.suffix} pct={pct} Icon={k.Icon} color={k.color} />;
             })}
           </div>
+
+          {/* Subscription countdown */}
+          <SubscriptionWidget member={member} levelColor={levelColor} />
 
           {/* Onboarding progress */}
           <div className={`bg-white border border-[#E0DDD8]/60 rounded-2xl px-5 py-4 ${SP} hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]`}>

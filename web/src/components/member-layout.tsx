@@ -146,6 +146,7 @@ export function MemberLayout({ children, role = "Standard" }: MemberLayoutProps)
   const [member, setMember]                   = useState<{
     first_name: string; last_name: string;
     avatar_url: string; role: string; unique_id?: string; status: string;
+    subscription_expires_at?: string | null;
   } | null>(null);
   const [systemSettings, setSystemSettings] = useState({
     maintenanceMode: false,
@@ -184,7 +185,7 @@ export function MemberLayout({ children, role = "Standard" }: MemberLayoutProps)
         if (user) {
           const { data } = await supabase
             .from("members")
-            .select("first_name, last_name, avatar_url, role, unique_id, status")
+            .select("first_name, last_name, avatar_url, role, unique_id, status, subscription_expires_at")
             .eq("id", user.id)
             .single();
           if (data) {
@@ -192,9 +193,10 @@ export function MemberLayout({ children, role = "Standard" }: MemberLayoutProps)
               first_name: data.first_name || "",
               last_name:  data.last_name  || "",
               avatar_url: data.avatar_url || "",
-              role:       data.role       || "Standard",
-              unique_id:  data.unique_id  || "",
-              status:     data.status     || "En attente de paiement",
+              role:                  data.role       || "Standard",
+              unique_id:             data.unique_id  || "",
+              status:                data.status     || "En attente de paiement",
+              subscription_expires_at: data.subscription_expires_at || null,
             });
             if (data.status === "En attente de paiement" && data.role !== "Admin" && data.role !== "Modérateur") {
               setPaymentPending(true);
@@ -378,7 +380,13 @@ export function MemberLayout({ children, role = "Standard" }: MemberLayoutProps)
     );
   }
 
-  if (member && member.status === "Expiré" && !isAdmin) {
+  const isDateExpired = !!(
+    member?.subscription_expires_at &&
+    new Date(member.subscription_expires_at) < new Date() &&
+    member.status === "Actif"
+  );
+
+  if (member && (member.status === "Expiré" || isDateExpired) && !isAdmin) {
     return (
       <div className="min-h-screen bg-[#F4F3F0] flex items-center justify-center p-6">
         <div className="max-w-md w-full rounded-2xl border border-[#E0DDD8] bg-white p-8 text-center space-y-6 relative overflow-hidden">
